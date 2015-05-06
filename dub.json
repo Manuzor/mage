@@ -1,6 +1,6 @@
 {
 	"name": "mage",
-	"description": "A minimal D application.",
+	"description": "Makefile and IDE Project file generator.",
   "license": "MIT",
 	"copyright": "Copyright © 2015, manuzor",
 	"authors": ["manuzor"],
