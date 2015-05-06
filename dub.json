@@ -1,0 +1,28 @@
+{
+	"name": "mage",
+	"description": "A minimal D application.",
+  "license": "MIT",
+	"copyright": "Copyright © 2015, manuzor",
+	"authors": ["manuzor"],
+
+  "targetPath": "output",
+
+  "sourcePaths": ["code"],
+
+  "dependencies": {},
+
+  "configurations": [
+    {
+      "name": "app",
+      "targetName": "wand",
+      "targetType": "executable",
+      "mainSourceFile": "code/app.d"
+    },
+    {
+      "name": "lib",
+      "targetName": "mage",
+      "targetType": "library",
+      "excludedSourceFiles": ["code/app.d"]
+    }
+  ]
+}
