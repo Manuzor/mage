@@ -1,20 +1,21 @@
 {
-	"name": "mage",
-	"description": "Makefile and IDE Project file generator.",
+  "name": "mage",
+  "description": "Makefile and IDE Project file generator.",
   "license": "MIT",
-	"copyright": "Copyright © 2015, manuzor",
-	"authors": ["manuzor"],
+  "copyright": "Copyright © 2015, manuzor",
+  "authors": ["manuzor"],
 
   "targetPath": "output",
 
   "sourcePaths": ["code"],
+  "importPaths": ["code"],
 
   "dependencies": {},
 
   "configurations": [
     {
       "name": "app",
-      "targetName": "wand",
+      "targetName": "mage",
       "targetType": "executable",
       "mainSourceFile": "code/app.d"
     },

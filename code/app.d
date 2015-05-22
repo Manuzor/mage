@@ -8,7 +8,6 @@ int main(string[] args)
 
   string sourceDir;
   auto helpInfo = getopt(args,
-                         config.required,
                          "source-dir", "The source dir.", &sourceDir);
 
   if(helpInfo.helpWanted) {
