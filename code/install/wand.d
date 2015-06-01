@@ -1,15 +1,15 @@
 module wand;
 
 import mage;
-import std.stdio;
 import helloworld;
 
 int main(string[] args) {
-  writeln("Running wand.");
+  log("Running wand.");
+
   foreach(targetFactory; targetFactories) {
     with(ScopedChdir(targetFactory.filePath.parent)) {
       auto target = targetFactory.create();
-      writefln("Target: %s", target);
+      logf("Target: %s", target.toString());
     }
   }
   return 0;

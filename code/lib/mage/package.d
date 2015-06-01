@@ -5,3 +5,4 @@ public import pathlib;
 
 // Internals
 public import mage.target;
+public import mage.logging;
