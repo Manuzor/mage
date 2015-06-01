@@ -1,3 +1,0 @@
-module mage;
-
-//public import ...;

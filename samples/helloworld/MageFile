@@ -1,0 +1,30 @@
+import mage;
+import std.algorithm;
+import std.array;
+
+@Target
+class Hello : Executable
+{
+  this()
+  {
+    name = "hello";
+    sourceFiles ~= [
+      "hello.cpp"
+    ].map!(a => Path(a)).filter!(a => a.exists && a.isFile).array;
+  }
+}
+
+/*
+@Target
+class LibHello : Library
+{
+  this()
+  {
+    super(LibraryType.Static);
+    name = "libhello";
+    sourceFiles ~= [
+      "hello.cpp"
+    ].map!(a => Path(a)).filter!(a => a.isFile).array;
+  }
+}
+*/

@@ -5,25 +5,49 @@
   "copyright": "Copyright © 2015, manuzor",
   "authors": ["manuzor"],
 
-  "targetPath": "output",
+  "targetType": "none",
 
-  "sourcePaths": ["code"],
-  "importPaths": ["code"],
-
-  "dependencies": {},
-
-  "configurations": [
-    {
-      "name": "app",
-      "targetName": "mage",
-      "targetType": "executable",
-      "mainSourceFile": "code/app.d"
-    },
+  "subPackages": [
     {
       "name": "lib",
-      "targetName": "mage",
+
+      "targetName": "libmage",
       "targetType": "library",
-      "excludedSourceFiles": ["code/app.d"]
+      "targetPath": "output",
+
+      "sourcePaths": ["code/lib"],
+      "importPaths": ["code/lib"],
+
+      "dependencies": {
+        "pathlib": { "path": "thirdParty/pathlib" }
+      }
+    },
+    {
+      "name": "app",
+
+      "targetName": "mage",
+      "targetType": "executable",
+      "targetPath": "output",
+
+      "sourcePaths": ["code/app"],
+      "importPaths": ["code/app"],
+      "mainSourceFile": "code/app/app.d",
+
+      "dependencies": { "mage:lib": "*" }
+    },
+    {
+      "name": "install",
+
+      "targetName": "mageInstall",
+      "targetType": "executable",
+      "targetPath": "output",
+
+      "sourcePaths": ["code/install"],
+      "importPaths": ["code/install"],
+      "excludedSourceFiles": ["code/install/wand.d"],
+      "mainSourceFile": "code/install/app.d",
+
+      "dependencies": { "mage:lib": "*" }
     }
   ]
 }
