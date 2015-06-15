@@ -1,4 +1,4 @@
-module mage.logging;
+module mage.log;
 
 public import std.experimental.logger;
 

@@ -4,5 +4,6 @@ module mage;
 public import pathlib;
 
 // Internals
+public import mage.log;
+public import mage.gen;
 public import mage.target;
-public import mage.logging;

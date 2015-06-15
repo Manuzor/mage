@@ -7,6 +7,7 @@ public __gshared ITarget[] targets;
 interface ITarget
 {
   string toString() const;
+  Path[] getSourceFiles();
 }
 
 
@@ -15,12 +16,15 @@ mixin template TargetCommonMixin()
   string name;
   Path[] sourceFiles;
 
-
   this() {
   }
 
   override string toString() const {
     return name;
+  }
+
+  override Path[] getSourceFiles() {
+    return sourceFiles;
   }
 }
 
@@ -86,7 +90,7 @@ public:
 }
 
 mixin template registerMageFile(alias T, alias filePath) {
-  import mage.reflectionutils;
+  import mage.util.reflection;
   shared static this() {
     pragma(msg, "[mage] Reflecting module: " ~ T.stringof);
     foreach(m; __traits(allMembers, T)) {

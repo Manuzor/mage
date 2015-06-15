@@ -1,12 +1,9 @@
 
 import mage;
-import std.stdio;
 import std.getopt;
 import std.algorithm;
 import std.conv;
 import std.array : array;
-
-auto mageSourceTemplate = Path("code") ~ "MageSource.d.template";
 
 struct CompilationData
 {
@@ -24,6 +21,13 @@ struct CompilationData
 
   /// Bare arguments passed to the compiler.
   Path[] files;
+
+  /// The versions that are set during compilation.
+  string[] versions;
+
+  Path objDir = Path("obj");
+
+  Path outFile;
 }
 
 string[] makeCommand(in CompilationData data) {
@@ -31,6 +35,7 @@ string[] makeCommand(in CompilationData data) {
     ~ data.files.map!(a => a.normalizedData.to!string).array[]
     ~ data.libs.map!(a => a.normalizedData.to!string).array[]
     ~ format(`-I%-(%s;%)`, data.importPaths.map!(a => a.normalizedData.to!string))
+    ~ data.versions.map!(a => format("-version=%s", a)).array
     ~ data.flags[]
   ;
 }
@@ -40,8 +45,8 @@ void compile(in CompilationData data) {
 
   // Create a command from the compilation data
   auto cmd = data.makeCommand();
-  writefln("Compiling: %-(%s %)", cmd);
-  writefln("Compiling: %s", cmd);
+  logf("Compiling: %-(%s %)", cmd);
+  logf("Compiling: %s", cmd);
 
   // Invoke the full compilation command.
   spawnProcess(cmd).wait();
@@ -56,34 +61,40 @@ mixin M_MageFileMixin;
 // foo/MageFile => foo.d
 // foo/bar/MageFile => foo/bar.d
 auto transformMageFile(in Path srcRoot, in Path mageFile, in Path outDir) {
-  import std.file : appendToFile = append;
-  //auto base = mageFile.parent.resolved().relativeTo(srcRoot.resolved()).to!string;
   auto base = mageFile.resolved().relativeTo(srcRoot.resolved().parent).parent;
   import std.stdio;
-  writefln("srcRoot: %s | base: %s", srcRoot, base);
+  logf("srcRoot: %s | base: %s", srcRoot, base);
   auto dest = outDir ~ format("%s.d", base);
   if(!dest.parent.exists) {
     dest.parent.mkdir(true);
   }
   mageFile.copyFileTo(dest);
-  dest.normalizedData.appendToFile(mageFileSuffix.format(mageFile.resolved().normalizedData));
+  dest.appendFile(mageFileSuffix.format(mageFile.resolved().normalizedData));
   return dest;
 }
 
 void dumpManifest(in string[string] manifest, in Path outFile) {
   import std.json;
-  import std.file : writeToFile = write;
 
   JSONValue j = manifest;
-  outFile.normalizedData.writeToFile(j.toPrettyString());
+  outFile.writeFile(j.toPrettyString());
+}
+
+void dumpGeneratorConfig(in string[string] cfg, in Path outFile) {
+  import std.json;
+
+  JSONValue j = cfg;
+  outFile.writeFile(j.toPrettyString());
 }
 
 
 int main(string[] args)
 {
   string tempStr;
+  string[] generators;
   auto helpInfo = getopt(args,
-                         "temp", "The temp dir.", &tempStr);
+                         "temp", "The temp dir.", &tempStr,
+                         "G", "The generator to use.", &generators);
   auto tempDir = Path(tempStr);
   if(!tempDir.exists) {
     tempDir.mkdir(true);
@@ -103,14 +114,18 @@ int main(string[] args)
   }
 
   auto sourceDir = Path(args[1]);
+  if(!sourceDir.exists) {
+    error("Given source directory does not exist: %s".format(sourceDir));
+  }
+
   auto mageFiles = sourceDir.glob("MageFile", SpanMode.breadth).array;
 
   if(mageFiles.empty) {
-    writefln("Unable to find any MageFile.");
+    error("Unable to find any MageFile in: %s".format(sourceDir));
     return 3;
   }
 
-  writefln("MageFiles: %(\n  %s%)", mageFiles);
+  logf("MageFiles: %(\n  %s%)", mageFiles);
 
   string[string] manifest;
   auto outDir = tempDir ~ "src";
@@ -122,16 +137,28 @@ int main(string[] args)
   }
 
   dumpManifest(manifest, tempDir ~ "MageSourceManifest.json");
-  writefln("Manifest: %s", manifest);
+  logf("Manifest: %s", manifest);
 
   CompilationData data;
-  //data.flags ~= "-m64";
+  debug data.flags ~= "-debug";
+  debug data.flags ~= "-gc";
+  debug data.flags ~= "-w";
+  version(X86)         data.flags ~= "-m32";
+  else version(X86_64) data.flags ~= "-m64";
+  else static assert(0, "Unsupported platform.");
   data.libs ~= Path("lib").glob("*.lib").array;
   data.importPaths ~= [cwd() ~ "import"];
   data.files ~= Path("code") ~ "wand.d";
   data.files ~= transformed[];
-
-  compile(data);
+  data.versions ~= "<dummy>";
+  auto genPath = Path("gen.cfg");
+  genPath.writeFile(""); // Clear the file.
+  foreach(g; generators) {
+    data.versions[$-1] = g;
+    data.outFile = Path("wand-%s".format(g));
+    compile(data);
+    genPath.appendFile("%s\n".format(g));
+  }
 
   return 0;
 }

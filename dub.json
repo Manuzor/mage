@@ -19,7 +19,7 @@
       "importPaths": ["code/lib"],
 
       "dependencies": {
-        "pathlib": { "path": "thirdParty/pathlib" }
+        "pathlib:lib": { "path": "thirdParty/pathlib" }
       }
     },
     {

@@ -1,4 +1,4 @@
-module mage.reflectionutils;
+module mage.util.reflection;
 
 template ResolveType(T)
 {
