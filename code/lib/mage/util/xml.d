@@ -10,8 +10,7 @@ import std.format : format;
 
 struct Text
 {
-  Element* parent;
-  string content;
+  string str;
 }
 
 struct Attribute
@@ -27,6 +26,7 @@ struct Element
   string name;
   Element*[] children;
   Attribute*[] attributes;
+  Text* textContent;
 
   Element* child(string name)
   {
@@ -50,7 +50,8 @@ struct Element
 
   Text* text(in string content)
   {
-    return null;
+    textContent = doc.mem.allocate!Text(content);
+    return textContent;
   }
 }
 
@@ -112,7 +113,7 @@ void serialize(S)(ref S stream, ref Element n)
     stream.write(" ");
     stream.serialize(*a);
   }
-  if(n.children.length > 0)
+  if(n.children.length > 0 || n.textContent !is null)
   {
     stream.write(">");
     stream.indent();
@@ -120,8 +121,9 @@ void serialize(S)(ref S stream, ref Element n)
       stream.serialize(*c);
     }
     stream.dedent();
-    stream.writeln();
-    stream.write("<%s/>".format(n.name));
+    if(n.textContent) stream.write(n.textContent.str);
+    else stream.writeln();
+    stream.write("</%s>".format(n.name));
   }
   else {
     stream.write("/>");
@@ -131,17 +133,6 @@ void serialize(S)(ref S stream, ref Element n)
 void serialize(S)(ref S stream, ref Attribute a)
 {
   stream.write(`%s="%s"`.format(a.key, a.value));
-}
-
-struct StdoutStream
-{
-  mixin StreamWriteln;
-
-  void write(string s)
-  {
-    import std.stdio : write;
-    write(s);
-  }
 }
 
 unittest {

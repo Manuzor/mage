@@ -67,8 +67,6 @@ struct FileStream
 
 struct StringStream
 {
-  import std.format;
-  
   string content;
 
   mixin StreamWriteln;
@@ -80,5 +78,17 @@ struct StringStream
   void write(string s)
   {
     content ~= s;
+  }
+}
+
+struct StdoutStream
+{
+  import io = std.stdio;
+
+  mixin StreamWriteln;
+
+  void write(string s)
+  {
+    io.write(s);
   }
 }
