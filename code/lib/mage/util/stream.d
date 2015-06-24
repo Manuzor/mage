@@ -55,7 +55,7 @@ struct FileStream
 
   mixin StreamWriteln;
 
-  this(Path p, string mode = "rb") {
+  this(Path p, string mode = "wb") {
     file = p.open(mode);
   }
 

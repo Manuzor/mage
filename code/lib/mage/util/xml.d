@@ -8,6 +8,12 @@ import mage.util.mem;
 
 import std.format : format;
 
+template isSomeParent(T)
+{
+  import mage.util.reflection;
+  alias isSomeParent = Resolve!(is(T == Doc) || is(T == Element));
+}
+
 struct Text
 {
   string str;
@@ -30,6 +36,7 @@ struct Element
 
   Element* child(string name)
   {
+    //auto c = doc.mem.allocate!Element(doc, &this, name);
     auto c = doc.mem.allocate!Element(doc, &this, name);
     children ~= c;
     return c;
@@ -60,7 +67,7 @@ struct Doc
   Block!(4.KiB) mem;
 
   string xmlVersion = "1.0";
-  string xmlEncoding = "UTF-8";
+  string xmlEncoding = "utf-8";
   Element*[] children;
 
   Element* child(string name) {

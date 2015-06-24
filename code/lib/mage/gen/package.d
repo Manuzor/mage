@@ -10,25 +10,16 @@ interface IGenerator
   void generate(ITarget target);
 }
 
-// T = Actual generator type.
-private template GeneratorWrapper(T)
-{
-  class GeneratorWrapper : IGenerator
-  {
-    T m_impl;
-
-    this(T impl) {
-      m_impl = impl;
-    }
-
-    override void generate(ITarget target) {
-      m_impl.generate(target);
-    }
-  }
-}
-
 IGenerator[string] generatorRegistry;
 
-void registerGenerator(T)(in string name, T generator) {
-  generatorRegistry[name] = new GeneratorWrapper!T(generator);
+void registerGenerator(in string name, IGenerator generator) {
+  generatorRegistry[name] = generator;
+}
+
+mixin template RegisterGenerator(alias Name, G)
+{
+  shared static this()
+  {
+    registerGenerator(Name, new G());
+  }
 }

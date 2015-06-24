@@ -42,7 +42,7 @@ auto allocate(T, A, Args...)(ref A allocator, Args args)
   return emplace!(T, Args)(allocator.allocate(T.sizeof), args);
 }
 
-void deallocate(T, A)(ref A allocator, T instance)
+void deallocate(A, T)(ref A allocator, T instance)
 {
   allocator.deallocate(cast(void[])(&instance)[0..T.sizeof]);
 }

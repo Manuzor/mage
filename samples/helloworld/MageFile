@@ -2,7 +2,6 @@ import mage;
 import std.algorithm;
 import std.array;
 
-@Target
 class Hello : Executable
 {
   this()
@@ -15,7 +14,6 @@ class Hello : Executable
 }
 
 /*
-@Target
 class LibHello : Library
 {
   this()

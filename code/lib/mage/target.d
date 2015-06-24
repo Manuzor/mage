@@ -2,36 +2,28 @@ module mage.target;
 
 import pathlib;
 
-public __gshared ITarget[] targets;
-
 interface ITarget
 {
-  string toString() const;
-  Path[] getSourceFiles();
+  abstract @property auto ref inout(Path[]) sourceFiles() inout;
+  abstract @property auto ref inout(string) name() inout;
 }
 
 
 mixin template TargetCommonMixin()
 {
-  string name;
-  Path[] sourceFiles;
+  string _name;
+  Path[] _sourceFiles;
 
-  this() {
-  }
+  this() {}
 
   override string toString() const {
     return name;
   }
 
-  override Path[] getSourceFiles() {
-    return sourceFiles;
-  }
-}
-
-
-// UDA
-struct Target
-{
+@property:
+override:
+  auto ref inout(Path[]) sourceFiles() inout { return _sourceFiles; }
+  auto ref inout(string) name() inout { return _name; }
 }
 
 
@@ -67,21 +59,20 @@ interface ITargetFactory
 
 __gshared ITargetFactory[] targetFactories;
 
-class TargetWrapper(TargetType) : ITargetFactory
+class TargetWrapper(T) : ITargetFactory
 {
   import std.stdio;
 private:
-  Path m_filePath;
+  Path _filePath;
 
 public:
 
-  override @property Path filePath() const { return m_filePath; }
+  override @property Path filePath() const { return _filePath; }
 
-  alias WrappedType = TargetType;
+  alias TargetType = T;
   
   this(Path filePath) {
-    import std.conv : to;
-    m_filePath = filePath;
+    _filePath = filePath;
   }
 
   override ITarget create() {
@@ -89,39 +80,28 @@ public:
   }
 }
 
-mixin template registerMageFile(alias T, alias filePath) {
-  import mage.util.reflection;
-  shared static this() {
+mixin template registerMageFile(alias T, alias filePath)
+{
+  shared static this()
+  {
+    import mage.util.reflection;
     pragma(msg, "[mage] Reflecting module: " ~ T.stringof);
-    foreach(m; __traits(allMembers, T)) {
-      static if(!__traits(compiles, typeof(__traits(getMember, T, m)))) {
-        static if(__traits(compiles, ResolveType!(__traits(getMember, T, m)))) {
+    foreach(m; __traits(allMembers, T))
+    {
+      static if(!__traits(compiles, typeof(__traits(getMember, T, m))))
+      {
+        static if(__traits(compiles, ResolveType!(__traits(getMember, T, m))))
+        {
           alias Type = ResolveType!(__traits(getMember, T, m));
-          static if(is(Type == class)) {
-            if(Type.stringof != "MageFileInstance") {
-              pragma(msg, "[mage]   Found a class: " ~ Type.stringof);
-              foreach(uda; __traits(getAttributes, Type)) {
-                static if(is(uda == Target)) {
-                  pragma(msg, "[mage]     Found a target! " ~ uda.stringof);
-                  static if(!__traits(compiles, new Type())) {
-                    pragma(msg, "[mage] WARNING: Target is not instantiable with `new`.");
-                  }
-                  targetFactories ~= new TargetWrapper!Type(Path(filePath));
-                }
-                else {
-                  pragma(msg, "[mage]     Found some UDA: " ~ uda.stringof);
-                }
-              }
+          static if(is(Type : ITarget))
+          {
+            pragma(msg, "[mage]   Found a target! " ~ Type.stringof);
+            static if(!__traits(compiles, new Type())) {
+              pragma(msg, "[mage]   WARNING: Target is not instantiable with `new`.");
             }
-          }
-          else {
-            pragma(msg, "[mage]   Found something: " ~ Type.stringof);
+            targetFactories ~= new TargetWrapper!Type(Path(filePath));
           }
         }
-      }
-      else {
-        alias Type = typeof(__traits(getMember, T, m));
-        pragma(msg, "[mage]   Module member: " ~ Type.stringof);
       }
     }
   }
