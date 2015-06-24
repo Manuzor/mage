@@ -16,10 +16,13 @@ void registerGenerator(in string name, IGenerator generator) {
   generatorRegistry[name] = generator;
 }
 
-mixin template RegisterGenerator(alias Name, G)
+mixin template RegisterGenerator(G, Name...)
 {
   shared static this()
   {
-    registerGenerator(Name, new G());
+    auto g = new G();
+    foreach(name; Name) {
+      registerGenerator(name, new G());
+    }
   }
 }

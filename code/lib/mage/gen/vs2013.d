@@ -5,7 +5,7 @@ import xml = mage.util.xml;
 import std.format : format;
 import std.conv : to;
 
-mixin RegisterGenerator!("vs2013", VS2013Generator);
+mixin RegisterGenerator!(VS2013Generator, "vs2013");
 
 class VS2013Generator : IGenerator
 {

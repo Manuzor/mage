@@ -154,7 +154,7 @@ int main(string[] args)
   auto genPath = Path("gen.cfg");
   genPath.writeFile(""); // Clear the file.
   foreach(g; generators) {
-    data.versions[$-1] = g;
+    data.versions[$-1] = "MageGen_%s".format(g);
     data.outFile = Path("wand-%s".format(g));
     compile(data);
     genPath.appendFile("%s\n".format(g));
