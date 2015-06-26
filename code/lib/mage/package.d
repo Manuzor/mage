@@ -1,5 +1,9 @@
 module mage;
 
+// Standard
+public import std.variant;
+public import std.exception : enforce;
+
 // Externals
 public import pathlib;
 
@@ -7,3 +11,4 @@ public import pathlib;
 public import mage.log;
 public import mage.gen;
 public import mage.target;
+public import mage.config;

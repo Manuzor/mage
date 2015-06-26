@@ -7,7 +7,7 @@ import mage.target;
 
 interface IGenerator
 {
-  void generate(ITarget target);
+  abstract void generate(Target[] target);
 }
 
 IGenerator[string] generatorRegistry;

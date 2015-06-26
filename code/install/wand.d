@@ -24,7 +24,7 @@ auto readGeneratorConfigs(in Path p) {
 // Is expected to be run in the `temp` dir that `mage` created.
 int main(string[] args) {
   log("Running wand.");
-  ITarget[] targets;
+  Target[] targets;
   foreach(targetFactory; targetFactories) {
     with(ScopedChdir(targetFactory.filePath.parent)) {
       auto target = targetFactory.create();
@@ -32,11 +32,19 @@ int main(string[] args) {
       targets ~= target;
     }
   }
-  foreach(target; targets) {
-    auto cfgs = readGeneratorConfigs(cwd() ~ "gen.cfg");
-    foreach(cfg; cfgs) {
-      generatorRegistry[cfg.name].generate(target);
+
+  // Iterate all configured generators and pass all targets.`
+  auto cfgs = readGeneratorConfigs(cwd() ~ "gen.cfg");
+  foreach(cfg; cfgs) {
+    auto path = Path(cfg.name);
+    if(!path.exists) {
+      path.mkdir(true);
+    }
+    logf("Generator: %s", cfg.name);
+    with(ScopedChdir(path)) {
+      generatorRegistry[cfg.name].generate(targets);
     }
   }
+
   return 0;
 }

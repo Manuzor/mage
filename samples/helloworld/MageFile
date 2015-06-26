@@ -6,8 +6,8 @@ class Hello : Executable
 {
   this()
   {
-    name = "hello";
-    sourceFiles ~= [
+    this.name = "hello";
+    this.sourceFiles = [
       "hello.cpp"
     ].map!(a => Path(a)).filter!(a => a.exists && a.isFile).array;
   }
@@ -18,11 +18,20 @@ class LibHello : Library
 {
   this()
   {
+    // Set the default library type.
     super(LibraryType.Static);
     name = "libhello";
     sourceFiles ~= [
       "hello.cpp"
     ].map!(a => Path(a)).filter!(a => a.isFile).array;
+  }
+
+  override void configure(in Properties context)
+  {
+    // If compiling with msvc, compile as dll.
+    if(context.compiler == "msvc") {
+      this.libType = LibraryType.Shared;
+    }
   }
 }
 */

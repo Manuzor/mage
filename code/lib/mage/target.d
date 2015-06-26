@@ -1,35 +1,31 @@
 module mage.target;
+import mage;
+import std.variant;
 
-import pathlib;
-
-interface ITarget
+/// Base class for all targets.
+abstract class Target
 {
-  abstract @property auto ref inout(Path[]) sourceFiles() inout;
-  abstract @property auto ref inout(string) name() inout;
-}
+  Properties _properties;
 
-
-mixin template TargetCommonMixin()
-{
-  string _name;
-  Path[] _sourceFiles;
-
-  this() {}
-
-  override string toString() const {
-    return name;
+  @property ref inout(Properties) properties() inout {
+    return _properties;
   }
 
-@property:
-override:
-  auto ref inout(Path[]) sourceFiles() inout { return _sourceFiles; }
-  auto ref inout(string) name() inout { return _name; }
+  final @property void opDispatch(string key, T)(in T v) {
+    properties().opDispatch!(key)(v);
+  }
+
+  final @property ref inout(Variant) opDispatch(string key)() inout {
+    return properties().opDispatch!(key)();
+  }
+
+  /// Context sensitive configure step.
+  void configure(in Properties context) {}
 }
 
 
-class Executable : ITarget
+class Executable : Target
 {
-  mixin TargetCommonMixin;
 }
 
 
@@ -39,14 +35,10 @@ enum LibraryType
   Shared
 }
 
-class Library : ITarget
+class Library : Target
 {
-  mixin TargetCommonMixin;
-
-  LibraryType libType = LibraryType.Static;
-
   this(LibraryType libType) {
-    this.libType = libType;
+    this._properties.libType = libType;
   }
 }
 
@@ -54,12 +46,12 @@ class Library : ITarget
 interface ITargetFactory
 {
   abstract @property Path filePath() const;
-  abstract ITarget create();
+  abstract Target create();
 }
 
 __gshared ITargetFactory[] targetFactories;
 
-class TargetWrapper(T) : ITargetFactory
+class TargetFactory(T) : ITargetFactory
 {
   import std.stdio;
 private:
@@ -75,7 +67,7 @@ public:
     _filePath = filePath;
   }
 
-  override ITarget create() {
+  override Target create() {
     return new TargetType();
   }
 }
@@ -93,13 +85,13 @@ mixin template registerMageFile(alias T, alias filePath)
         static if(__traits(compiles, ResolveType!(__traits(getMember, T, m))))
         {
           alias Type = ResolveType!(__traits(getMember, T, m));
-          static if(is(Type : ITarget))
+          static if(is(Type : Target))
           {
             pragma(msg, "[mage]   Found a target! " ~ Type.stringof);
             static if(!__traits(compiles, new Type())) {
               pragma(msg, "[mage]   WARNING: Target is not instantiable with `new`.");
             }
-            targetFactories ~= new TargetWrapper!Type(Path(filePath));
+            targetFactories ~= new TargetFactory!Type(Path(filePath));
           }
         }
       }

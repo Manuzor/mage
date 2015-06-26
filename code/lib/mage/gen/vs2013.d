@@ -9,74 +9,75 @@ mixin RegisterGenerator!(VS2013Generator, "vs2013");
 
 class VS2013Generator : IGenerator
 {
-  override void generate(ITarget target)
+  override void generate(Target[] targets)
   {
-    logf("Generator vs2013");
-    logf("Target: %s", target.to!string);
-    logf("Source Files: %(\n  %s%)", target.sourceFiles);
+    foreach(target; targets) {
+      logf("Target: %s", target.to!string);
+      logf("Source Files: %(\n  %s%)", target.sourceFiles.get!(const(Path)[]));
 
-    CppProject proj;
-    proj.configs.length = 2;
+      CppProject proj;
+      proj.configs.length = 2;
 
-    // Debug Win32
-    with(proj.configs[0]) {
-      name = "Debug";
-      platform = "Win32";
-      type = "Application";
-      useDebugLibs = "true";
-      platformToolset = "v120";
-      wholeProgramOptimization = null;
-      characterSet = "Unicode";
-      linkIncremental = "true";
-      with(clCompile) {
-        pch = "";
-        warningLevel = "Level 3";
-        optimization = "Disabled";
-        preprocessorDefinitions = [
-          "WIN32",
-          "_DEBUG",
-          "_CONSOLE",
-          "_LIB"
-        ];
-        inheritPreprocessorDefinitions = true;
+      // Debug Win32
+      with(proj.configs[0]) {
+        name = "Debug";
+        platform = "Win32";
+        type = "Application";
+        useDebugLibs = "true";
+        platformToolset = "v120";
+        wholeProgramOptimization = null;
+        characterSet = "Unicode";
+        linkIncremental = "true";
+        with(clCompile) {
+          pch = "";
+          warningLevel = "Level 3";
+          optimization = "Disabled";
+          preprocessorDefinitions = [
+            "WIN32",
+            "_DEBUG",
+            "_CONSOLE",
+            "_LIB"
+          ];
+          inheritPreprocessorDefinitions = true;
+        }
+        with(link) {
+          subSystem = "Console";
+          genDebugInfo = "true";
+        }
       }
-      with(link) {
-        subSystem = "Console";
-        genDebugInfo = "true";
+      // Release Win32
+      with(proj.configs[1]) {
+        name = "Release";
+        platform = "Win32";
+        type = "Application";
+        useDebugLibs = "false";
+        platformToolset = "v120";
+        wholeProgramOptimization = "true";
+        characterSet = "Unicode";
+        linkIncremental = "false";
+        with(clCompile) {
+          pch = "";
+          warningLevel = "Level 3";
+          optimization = "MaxSpeed";
+          functionLevelLinking = "true";
+          intrinsicFunctions = "true";
+          preprocessorDefinitions = [
+            "WIN32",
+            "NDEBUG",
+            "_CONSOLE",
+            "_LIB"
+          ];
+          inheritPreprocessorDefinitions = true;
+        }
+        with(link) {
+          subSystem = "Console";
+          genDebugInfo = "true";
+          enableCOMDATFolding = "true";
+          optimizeReferences = "true";
+        }
       }
+      proj.generateVcxproj(Path("%s.vcxproj".format(target.name.get!string)));
     }
-    // Release Win32
-    with(proj.configs[1]) {
-      name = "Release";
-      platform = "Win32";
-      type = "Application";
-      useDebugLibs = "false";
-      platformToolset = "v120";
-      wholeProgramOptimization = "true";
-      characterSet = "Unicode";
-      linkIncremental = "false";
-      with(clCompile) {
-        pch = "";
-        warningLevel = "Level 3";
-        optimization = "MaxSpeed";
-        functionLevelLinking = "true";
-        intrinsicFunctions = "true";
-        preprocessorDefinitions = [
-          "WIN32",
-          "NDEBUG",
-          "_CONSOLE",
-          "_LIB"
-        ];
-        inheritPreprocessorDefinitions = true;
-      }
-      with(link) {
-        subSystem = "Console";
-        genDebugInfo = "true";
-        enableCOMDATFolding = "true";
-        optimizeReferences = "true";
-      }
-    }
-    proj.generateVcxproj(Path("one.vcxproj"));
   }
 }
 
