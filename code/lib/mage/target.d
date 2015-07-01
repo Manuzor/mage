@@ -26,6 +26,9 @@ abstract class Target
 
 class Executable : Target
 {
+  this() {
+    properties.type = "executable";
+  }
 }
 
 
@@ -38,7 +41,8 @@ enum LibraryType
 class Library : Target
 {
   this(LibraryType libType) {
-    this._properties.libType = libType;
+    properties.type = "library";
+    properties.libType = libType;
   }
 }
 

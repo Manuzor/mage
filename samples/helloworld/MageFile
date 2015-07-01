@@ -10,6 +10,9 @@ class Hello : Executable
     this.sourceFiles = [
       "hello.cpp"
     ].map!(a => Path(a)).filter!(a => a.exists && a.isFile).array;
+    //Properties compiler;
+    //compiler.warningLevel = 4;
+    //this.compiler = compiler;
   }
 }
 

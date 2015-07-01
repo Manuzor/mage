@@ -1,4 +1,4 @@
-module mage.property;
+module mage.config;
 import mage;
 import std.variant;
 
@@ -66,4 +66,22 @@ unittest
     p3.blubb = "abc";
     assert(*p1.tryGet("blubb", p2, p3) == "abc");
   }
+}
+
+__gshared Properties globalProperties;
+
+shared static this()
+{
+  // Default configurations if targets don't set any.
+  Properties[] cfgs;
+  cfgs.length = 2;
+  cfgs[0].name = "Debug";
+  cfgs[1].name = "Release";
+  globalProperties.configurations = cfgs;
+}
+
+unittest
+{
+  globalProperties.configurations.get!(const(Properties)[])[0].name == "Debug";
+  globalProperties.configurations.get!(const(Properties)[])[1].name == "Release";
 }

@@ -3,6 +3,8 @@ module mage;
 // Standard
 public import std.variant;
 public import std.exception : enforce;
+public import std.algorithm;
+public import std.string;
 
 // Externals
 public import pathlib;

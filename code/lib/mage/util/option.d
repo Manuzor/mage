@@ -1,6 +1,5 @@
 module mage.util.option;
 import mage;
-import mage.util.conv;
 
 struct Option(T) {
   alias WrappedType = T;

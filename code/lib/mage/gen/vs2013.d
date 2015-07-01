@@ -4,6 +4,7 @@ import mage;
 import xml = mage.util.xml;
 import std.format : format;
 import std.conv : to;
+import mage.util.option;
 
 mixin RegisterGenerator!(VS2013Generator, "vs2013");
 
@@ -11,73 +12,42 @@ class VS2013Generator : IGenerator
 {
   override void generate(Target[] targets)
   {
-    foreach(target; targets) {
-      logf("Target: %s", target.to!string);
-      logf("Source Files: %(\n  %s%)", target.sourceFiles.get!(const(Path)[]));
-
-      CppProject proj;
-      proj.configs.length = 2;
-
-      // Debug Win32
-      with(proj.configs[0]) {
-        name = "Debug";
-        platform = "Win32";
-        type = "Application";
-        useDebugLibs = "true";
-        platformToolset = "v120";
-        wholeProgramOptimization = null;
-        characterSet = "Unicode";
-        linkIncremental = "true";
-        with(clCompile) {
-          pch = "";
-          warningLevel = "Level 3";
-          optimization = "Disabled";
-          preprocessorDefinitions = [
-            "WIN32",
-            "_DEBUG",
-            "_CONSOLE",
-            "_LIB"
-          ];
-          inheritPreprocessorDefinitions = true;
-        }
-        with(link) {
-          subSystem = "Console";
-          genDebugInfo = "true";
-        }
-      }
-      // Release Win32
-      with(proj.configs[1]) {
-        name = "Release";
-        platform = "Win32";
-        type = "Application";
-        useDebugLibs = "false";
-        platformToolset = "v120";
-        wholeProgramOptimization = "true";
-        characterSet = "Unicode";
-        linkIncremental = "false";
-        with(clCompile) {
-          pch = "";
-          warningLevel = "Level 3";
-          optimization = "MaxSpeed";
-          functionLevelLinking = "true";
-          intrinsicFunctions = "true";
-          preprocessorDefinitions = [
-            "WIN32",
-            "NDEBUG",
-            "_CONSOLE",
-            "_LIB"
-          ];
-          inheritPreprocessorDefinitions = true;
-        }
-        with(link) {
-          subSystem = "Console";
-          genDebugInfo = "true";
-          enableCOMDATFolding = "true";
-          optimizeReferences = "true";
-        }
-      }
-      proj.generateVcxproj(Path("%s.vcxproj".format(target.name.get!string)));
+    foreach(target; targets)
+    {
+      auto proj = cppProject(target);
+      proj.generateVcxproj(Path("%s.vcxproj".format(target.name.get!string())));
     }
+  }
+
+  CppProject cppProject(Target target)
+  {
+    logf("Target: %s", target.to!string);
+    auto sourceFiles = target.sourceFiles.get!(const(Path)[]);
+    logf("Source Files: %(\n  %s%)", sourceFiles);
+
+    const(Properties)[] cfgs = target.properties.tryGet("configurations", globalProperties)
+                                                .enforce("No configurations found")
+                                                .get!(const(Properties)[]);
+    CppProject proj;
+    foreach(ref cfgProps; cfgs)
+    {
+      CppConfig cfg;
+      cfg.setNameFrom(cfgProps).enforce("A configuration needs a name!");
+      log("Configuration: %s".format(cfg.name));
+      cfg.setPlatformFrom(cfgProps);
+      cfg.setTypeFrom(target.properties);
+      cfg.setUseDebugLibsFrom(cfgProps);
+      cfg.platformToolset = "v120";
+      cfg.characterSet = "Unicode";
+      cfg.wholeProgramOptimization = true;
+      cfg.linkIncremental = true;
+      cfg.setClCompileFrom(cfgProps);
+      cfg.setLinkFrom(cfgProps);
+
+      proj.configs.length += 1;
+      proj.configs[$-1] = cfg;
+    }
+    return proj;
   }
 }
 
@@ -106,24 +76,209 @@ struct CppConfig
   string name;
   string platform;
   string type;
-  string useDebugLibs;
+  Option!bool useDebugLibs;
   string platformToolset;
   string characterSet;
-  string wholeProgramOptimization;
-  string linkIncremental;
+  Option!bool wholeProgramOptimization;
+  Option!bool linkIncremental;
   ClCompile clCompile;
   Link link;
+
+
+  static shared string[string] platformMap;
+
+  /// Translate a general mage platform name to a MSBuild one.
+  static string trPlatform(string platformName) {
+    auto mapped = platformName in platformMap;
+    return *mapped.enforce("Unsupported platform: %s".format(platformName));
+  }
+
+  static string trWarningLevel(int level) {
+    return "Level %s".format(level);
+  }
+
+  static string trOptimization(int level) {
+    try {
+      return [ "Disabled", "MinSize", "MaxSpeed", "Full" ][level];
+    }
+    catch(core.exception.RangeError) {
+      warning("Unsupported warning level '%'".format(level));
+    }
+    return null;
+  }
 }
 
-struct ClCompile
+shared static this()
 {
-  string warningLevel;
-  string pch;
-  string optimization;
-  string functionLevelLinking;
-  string intrinsicFunctions;
-  string[] preprocessorDefinitions;
-  bool inheritPreprocessorDefinitions;
+  CppConfig.platformMap["x86"]    = "Win32";
+  CppConfig.platformMap["x86_64"] = "x64";
+}
+
+/// Set the config name from some properties.
+bool setNameFrom(ref CppConfig cfg, in Properties src)
+{
+  auto pValue = src.tryGet("name");
+  if(pValue is null) {
+    return false;
+  }
+  cfg.name = pValue.get!(const(string));
+  return true;
+}
+
+unittest
+{
+  CppConfig cfg;
+  Properties props;
+  assert(cfg.setNameFrom(props) == false);
+  props.name = "foo";
+  assert(cfg.setNameFrom(props) == true);
+  assert(cfg.name == "foo");
+}
+
+/// Set the config name from some properties.
+/// Returns: True if the given properties contain a platform field
+bool setPlatformFrom(ref CppConfig cfg, in Properties src)
+{
+  auto pValue = src.tryGet("platform");
+  if(pValue is null) {
+    return false;
+  }
+  auto platformName = pValue.get!(const(string));
+  cfg.platform = CppConfig.trPlatform(platformName);
+  return true;
+}
+
+unittest
+{
+  CppConfig cfg;
+  Properties props;
+  assert(cfg.setPlatformFrom(props) == false);
+  props.platform = "x86_64";
+  assert(cfg.setPlatformFrom(props) == true);
+  assert(cfg.platform == "x64");
+  props.platform = "x86";
+  assert(cfg.setPlatformFrom(props) == true);
+  assert(cfg.platform == "Win32");
+}
+
+bool setTypeFrom(ref CppConfig cfg, in Properties src)
+{
+  auto pValue = src.tryGet("type");
+  if(pValue is null) {
+    return false;
+  }
+  auto typeName = pValue.get!(const(string))();
+  switch(typeName) {
+    case "executable":
+      cfg.type = "Application";
+      break;
+    case "library":
+    {
+      auto libType = src.tryGet("libType")
+                        .enforce("")
+                        .get!(const(LibraryType))();
+      final switch(libType)
+      {
+        case LibraryType.Static: assert(0, "Not implemented");
+        case LibraryType.Shared: assert(0, "Not implemented");
+      }
+    }
+    default: assert(0, "Not implemented");
+  }
+
+  return true;
+}
+
+unittest
+{
+  CppConfig cfg;
+  Properties props;
+  assert(cfg.setTypeFrom(props) == false);
+  props.type = "executable";
+  assert(cfg.setTypeFrom(props) == true);
+  assert(cfg.type == "Application");
+}
+
+/// Tries for the property "useDebugLibs". If it is not found,
+/// and the "name" property contains the string "release"
+/// (case insensitive), the debug libs will not be used.
+bool setUseDebugLibsFrom(ref CppConfig cfg, in Properties src)
+{
+  auto pValue = src.tryGet("useDebugLibs");
+  if(pValue !is null) {
+    cfg.useDebugLibs = pValue.get!(const(bool))();
+    return true;
+  }
+  // If "use debug libs" was not explicitly given, try to see if the
+  // string "release" is contained in the name. If it is, we will
+  // not use the debug libs.
+  pValue = src.tryGet("name");
+  if(pValue is null) {
+    return false;
+  }
+  import std.uni : toLower;
+  auto name = pValue.get!(const(string))();
+  bool isRelease = name.canFind!((a, b) => a.toLower() == b.toLower())("release");
+  cfg.useDebugLibs = !isRelease;
+  return true;
+}
+
+unittest
+{
+  CppConfig cfg;
+  Properties props;
+  assert(cfg.setUseDebugLibsFrom(props) == false);
+  props.name = "Release";
+  assert(cfg.setUseDebugLibsFrom(props) == true);
+  assert(cfg.useDebugLibs.unwrap() == false);
+  props.name = "Debug";
+  assert(cfg.setUseDebugLibsFrom(props) == true);
+  assert(cfg.useDebugLibs.unwrap() == true);
+}
+
+bool setClCompileFrom(ref CppConfig cfg, in Properties src)
+{
+  auto pCompilerProps = src.tryGet("compiler");
+  if(pCompilerProps is null) {
+    return false;
+  }
+  auto props = pCompilerProps.get!(const(Properties))();
+  with(cfg) {
+    if(auto pValue = props.tryGet("warningLevel")) {
+      clCompile.warningLevel = CppConfig.trWarningLevel(pValue.get!(const(int))());
+    }
+    if(auto pValue = props.tryGet("pch")) {
+      assert(0, "Not implemented");
+    }
+    if(auto pValue = props.tryGet("optimization")) {
+      clCompile.optimization = CppConfig.trOptimization(pValue.get!(const(int))());
+    }
+    if(auto pValue = props.tryGet("functionLevelLinking")) {
+      clCompile.functionLevelLinking = pValue.get!(const(bool))();
+    }
+    if(auto pValue = props.tryGet("intrinsicFunctions")) {
+      clCompile.intrinsicFunctions = pValue.get!(const(bool))();
+    }
+    if(auto pValue = props.tryGet("defines")) {
+      clCompile.defines = pValue.get!(const(string[]))().dup;
+    }
+    if(auto pValue = props.tryGet("inheritDefines")) {
+      clCompile.inheritDefines = pValue.get!(const(bool))();
+    }
+  }
+  return true;
+}
+
+bool setLinkFrom(ref CppConfig cfg, in Properties src)
+{
+  auto pLinkerProps = src.tryGet("linker");
+  if(pLinkerProps is null) {
+    return false;
+  }
+
+  // TODO
+
+  return true;
 }
 
 xml.Element* append(P)(ref P parent, in CppProject proj)
@@ -160,13 +315,13 @@ xml.Element* append(P)(ref P parent, in CppProject proj)
         assert(cfg.type, "Need a configuration type!");
         child("ConfigurationType").text(cfg.type);
         if(cfg.useDebugLibs) {
-          child("UseDebugLibraries").text(cfg.useDebugLibs);
+          child("UseDebugLibraries").text(cfg.useDebugLibs.unwrap().to!string());
         }
         if(cfg.platformToolset) {
           child("PlatformToolset").text(cfg.platformToolset);
         }
         if(cfg.wholeProgramOptimization) {
-          child("WholeProgramOptimization").text(cfg.wholeProgramOptimization);
+          child("WholeProgramOptimization").text(cfg.wholeProgramOptimization.unwrap().to!string());
         }
         if(cfg.characterSet) {
           child("CharacterSet").text(cfg.characterSet);
@@ -203,7 +358,9 @@ xml.Element* append(P)(ref P parent, in CppProject proj)
     foreach(cfg; proj.configs) {
       with(child("PropertyGroup")) {
         attr("Condition", `'$(Configuration)|$(Platform)'=='%s|%s'`.format(cfg.name, cfg.platform));
-        child("LinkIncremental").text(cfg.linkIncremental);
+        if(cfg.linkIncremental) {
+          child("LinkIncremental").text(cfg.linkIncremental.unwrap().to!string());
+        }
       }
     }
     // Item definition groups
@@ -226,18 +383,39 @@ xml.Element* append(P)(ref P parent, in CppProject proj)
   return c;
 }
 
+struct ClCompile
+{
+  string warningLevel;
+  string pch;
+  string optimization;
+  Option!bool functionLevelLinking;
+  Option!bool intrinsicFunctions;
+  string[] defines;
+  bool inheritDefines = true;
+}
+
 xml.Element* append(P)(ref P parent, in ClCompile cl)
   if(xml.isSomeParent!P)
 {
   auto n = parent.child("ClCompile");
   with(n) {
-    child("PrecompiledHeader").text(cl.pch);
-    child("WarningLevel").text(cl.warningLevel);
-    child("Optimization").text(cl.optimization);
-    if(cl.functionLevelLinking) child("FunctionLevelLinking").text(cl.functionLevelLinking);
-    if(cl.intrinsicFunctions) child("IntrinsicFunctions").text(cl.intrinsicFunctions);
-    auto defs = cl.preprocessorDefinitions.dup;
-    if(cl.inheritPreprocessorDefinitions) {
+    if(cl.pch) {
+      child("PrecompiledHeader").text(cl.pch);
+    }
+    if(cl.warningLevel) {
+      child("WarningLevel").text(cl.warningLevel);
+    }
+    if(cl.optimization) {
+      child("Optimization").text(cl.optimization);
+    }
+    if(cl.functionLevelLinking)  {
+      child("FunctionLevelLinking").text(cl.functionLevelLinking.unwrap().to!string());
+    }
+    if(cl.intrinsicFunctions) {
+      child("IntrinsicFunctions").text(cl.intrinsicFunctions.unwrap().to!string());
+    }
+    auto defs = cl.defines.dup;
+    if(cl.inheritDefines) {
       defs ~= "%(PreprocessorDefinitions)";
     }
     child("PreprocessorDefinitions").text("%-(%s;%)".format(defs));
@@ -258,10 +436,18 @@ xml.Element* append(P)(ref P parent, in Link lnk)
 {
   auto n = parent.child("Link");
   with(n) {
-    child("SubSystem").text(lnk.subSystem);
-    child("GenerateDebugInformation").text(lnk.genDebugInfo);
-    if(lnk.enableCOMDATFolding) child("EnableCOMDATFolding").text(lnk.enableCOMDATFolding);
-    if(lnk.optimizeReferences) child("OptimizeReferences").text(lnk.optimizeReferences);
+    if(lnk.subSystem) {
+      child("SubSystem").text(lnk.subSystem);
+    }
+    if(lnk.genDebugInfo) {
+      child("GenerateDebugInformation").text(lnk.genDebugInfo);
+    }
+    if(lnk.enableCOMDATFolding) {
+      child("EnableCOMDATFolding").text(lnk.enableCOMDATFolding);
+    }
+    if(lnk.optimizeReferences) {
+      child("OptimizeReferences").text(lnk.optimizeReferences);
+    }
   }
   return n;
 }
