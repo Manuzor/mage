@@ -68,7 +68,10 @@ unittest
   }
 }
 
+enum isProperties(T) = is(T == Properties);
+
 __gshared Properties globalProperties;
+__gshared Properties defaultProperties;
 
 shared static this()
 {
@@ -76,12 +79,16 @@ shared static this()
   Properties[] cfgs;
   cfgs.length = 2;
   cfgs[0].name = "Debug";
+  cfgs[0].architecture = "x86";
   cfgs[1].name = "Release";
-  globalProperties.configurations = cfgs;
+  cfgs[1].architecture = "x86";
+  defaultProperties.configurations = cfgs;
 }
 
 unittest
 {
-  globalProperties.configurations.get!(const(Properties)[])[0].name == "Debug";
-  globalProperties.configurations.get!(const(Properties)[])[1].name == "Release";
+  defaultProperties.configurations.get!(const(Properties)[])[0].name == "Debug";
+  defaultProperties.configurations.get!(const(Properties)[])[0].architecture == "x86";
+  defaultProperties.configurations.get!(const(Properties)[])[1].name == "Release";
+  defaultProperties.configurations.get!(const(Properties)[])[1].architecture == "x86";
 }

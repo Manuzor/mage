@@ -5,6 +5,7 @@ import xml = mage.util.xml;
 import std.format : format;
 import std.conv : to;
 import mage.util.option;
+import mage.util.reflection;
 
 mixin RegisterGenerator!(VS2013Generator, "vs2013");
 
@@ -25,7 +26,7 @@ class VS2013Generator : IGenerator
     auto sourceFiles = target.sourceFiles.get!(const(Path)[]);
     logf("Source Files: %(\n  %s%)", sourceFiles);
 
-    const(Properties)[] cfgs = target.properties.tryGet("configurations", globalProperties)
+    const(Properties)[] cfgs = target.properties.tryGet("configurations", globalProperties, defaultProperties)
                                                 .enforce("No configurations found")
                                                 .get!(const(Properties)[]);
     CppProject proj;
@@ -34,15 +35,16 @@ class VS2013Generator : IGenerator
       CppConfig cfg;
       cfg.setNameFrom(cfgProps).enforce("A configuration needs a name!");
       log("Configuration: %s".format(cfg.name));
-      cfg.setPlatformFrom(cfgProps);
+      cfg.setArchitectureFrom(cfgProps, globalProperties, defaultProperties).enforce("A configuration needs an architecture!");
+      log("Architecture: %s".format(cfg.architecture));
       cfg.setTypeFrom(target.properties);
-      cfg.setUseDebugLibsFrom(cfgProps);
+      cfg.setUseDebugLibsFrom(cfgProps, globalProperties, defaultProperties);
       cfg.platformToolset = "v120";
       cfg.characterSet = "Unicode";
       cfg.wholeProgramOptimization = true;
       cfg.linkIncremental = true;
-      cfg.setClCompileFrom(cfgProps);
-      cfg.setLinkFrom(cfgProps);
+      cfg.setClCompileFrom(cfgProps, globalProperties, defaultProperties);
+      cfg.setLinkFrom(cfgProps, globalProperties, defaultProperties);
 
       proj.configs.length += 1;
       proj.configs[$-1] = cfg;
@@ -74,7 +76,7 @@ struct CppProject
 struct CppConfig
 {
   string name;
-  string platform;
+  string architecture;
   string type;
   Option!bool useDebugLibs;
   string platformToolset;
@@ -85,12 +87,12 @@ struct CppConfig
   Link link;
 
 
-  static shared string[string] platformMap;
+  static shared string[string] architectureMap;
 
-  /// Translate a general mage platform name to a MSBuild one.
-  static string trPlatform(string platformName) {
-    auto mapped = platformName in platformMap;
-    return *mapped.enforce("Unsupported platform: %s".format(platformName));
+  /// Translate a general mage architecture name to a MSBuild one.
+  static string trPlatform(string architectureName) {
+    auto mapped = architectureName in architectureMap;
+    return *mapped.enforce("Unsupported architecture: %s".format(architectureName));
   }
 
   static string trWarningLevel(int level) {
@@ -110,14 +112,15 @@ struct CppConfig
 
 shared static this()
 {
-  CppConfig.platformMap["x86"]    = "Win32";
-  CppConfig.platformMap["x86_64"] = "x64";
+  CppConfig.architectureMap["x86"]    = "Win32";
+  CppConfig.architectureMap["x86_64"] = "x64";
 }
 
 /// Set the config name from some properties.
-bool setNameFrom(ref CppConfig cfg, in Properties src)
+bool setNameFrom(P...)(ref CppConfig cfg, in Properties src, in P fallbacks)
+  if(allSatisfy!(isProperties, P))
 {
-  auto pValue = src.tryGet("name");
+  auto pValue = src.tryGet("name", fallbacks);
   if(pValue is null) {
     return false;
   }
@@ -133,18 +136,21 @@ unittest
   props.name = "foo";
   assert(cfg.setNameFrom(props) == true);
   assert(cfg.name == "foo");
+
+  assert(!__traits(compiles, cfg.setNameFrom()));
 }
 
 /// Set the config name from some properties.
-/// Returns: True if the given properties contain a platform field
-bool setPlatformFrom(ref CppConfig cfg, in Properties src)
+/// Returns: True if the given properties contain a architecture field
+bool setArchitectureFrom(P...)(ref CppConfig cfg, in Properties src, in P fallbacks)
+  if(allSatisfy!(isProperties, P))
 {
-  auto pValue = src.tryGet("platform");
+  auto pValue = src.tryGet("architecture", fallbacks);
   if(pValue is null) {
     return false;
   }
-  auto platformName = pValue.get!(const(string));
-  cfg.platform = CppConfig.trPlatform(platformName);
+  auto architectureName = pValue.get!(const(string));
+  cfg.architecture = CppConfig.trPlatform(architectureName);
   return true;
 }
 
@@ -152,18 +158,19 @@ unittest
 {
   CppConfig cfg;
   Properties props;
-  assert(cfg.setPlatformFrom(props) == false);
-  props.platform = "x86_64";
-  assert(cfg.setPlatformFrom(props) == true);
-  assert(cfg.platform == "x64");
-  props.platform = "x86";
-  assert(cfg.setPlatformFrom(props) == true);
-  assert(cfg.platform == "Win32");
+  assert(cfg.setArchitectureFrom(props) == false);
+  props.architecture = "x86_64";
+  assert(cfg.setArchitectureFrom(props) == true);
+  assert(cfg.architecture == "x64");
+  props.architecture = "x86";
+  assert(cfg.setArchitectureFrom(props) == true);
+  assert(cfg.architecture == "Win32");
 }
 
-bool setTypeFrom(ref CppConfig cfg, in Properties src)
+bool setTypeFrom(P...)(ref CppConfig cfg, in Properties src, in P fallbacks)
+  if(allSatisfy!(isProperties, P))
 {
-  auto pValue = src.tryGet("type");
+  auto pValue = src.tryGet("type", fallbacks);
   if(pValue is null) {
     return false;
   }
@@ -174,7 +181,7 @@ bool setTypeFrom(ref CppConfig cfg, in Properties src)
       break;
     case "library":
     {
-      auto libType = src.tryGet("libType")
+      auto libType = src.tryGet("libType", fallbacks)
                         .enforce("")
                         .get!(const(LibraryType))();
       final switch(libType)
@@ -202,9 +209,10 @@ unittest
 /// Tries for the property "useDebugLibs". If it is not found,
 /// and the "name" property contains the string "release"
 /// (case insensitive), the debug libs will not be used.
-bool setUseDebugLibsFrom(ref CppConfig cfg, in Properties src)
+bool setUseDebugLibsFrom(P...)(ref CppConfig cfg, in Properties src, in P fallbacks)
+  if(allSatisfy!(isProperties, P))
 {
-  auto pValue = src.tryGet("useDebugLibs");
+  auto pValue = src.tryGet("useDebugLibs", fallbacks);
   if(pValue !is null) {
     cfg.useDebugLibs = pValue.get!(const(bool))();
     return true;
@@ -212,7 +220,7 @@ bool setUseDebugLibsFrom(ref CppConfig cfg, in Properties src)
   // If "use debug libs" was not explicitly given, try to see if the
   // string "release" is contained in the name. If it is, we will
   // not use the debug libs.
-  pValue = src.tryGet("name");
+  pValue = src.tryGet("name", fallbacks);
   if(pValue is null) {
     return false;
   }
@@ -236,9 +244,10 @@ unittest
   assert(cfg.useDebugLibs.unwrap() == true);
 }
 
-bool setClCompileFrom(ref CppConfig cfg, in Properties src)
+bool setClCompileFrom(P...)(ref CppConfig cfg, in Properties src, in P fallbacks)
+  if(allSatisfy!(isProperties, P))
 {
-  auto pCompilerProps = src.tryGet("compiler");
+  auto pCompilerProps = src.tryGet("compiler", fallbacks);
   if(pCompilerProps is null) {
     return false;
   }
@@ -269,9 +278,10 @@ bool setClCompileFrom(ref CppConfig cfg, in Properties src)
   return true;
 }
 
-bool setLinkFrom(ref CppConfig cfg, in Properties src)
+bool setLinkFrom(P...)(ref CppConfig cfg, in Properties src, in P fallbacks)
+  if(allSatisfy!(isProperties, P))
 {
-  auto pLinkerProps = src.tryGet("linker");
+  auto pLinkerProps = src.tryGet("linker", fallbacks);
   if(pLinkerProps is null) {
     return false;
   }
@@ -293,9 +303,9 @@ xml.Element* append(P)(ref P parent, in CppProject proj)
       attr("Label", "ProjectConfigurations");
       foreach(cfg; proj.configs) {
         with(child("ProjectConfiguration")) {
-          attr("Include", "%s|%s".format(cfg.name, cfg.platform));
+          attr("Include", "%s|%s".format(cfg.name, cfg.architecture));
           child("Configuration").text(cfg.name);
-          child("Platform").text(cfg.platform);
+          child("Platform").text(cfg.architecture);
         }
       }
     }
@@ -310,7 +320,7 @@ xml.Element* append(P)(ref P parent, in CppProject proj)
     }
     foreach(cfg; proj.configs) {
       with(child("PropertyGroup")) {
-        attr("Condition", `'$(Configuration)|$(Platform)'=='%s|%s'`.format(cfg.name, cfg.platform));
+        attr("Condition", `'$(Configuration)|$(Platform)'=='%s|%s'`.format(cfg.name, cfg.architecture));
         attr("Label", "Configuration");
         assert(cfg.type, "Need a configuration type!");
         child("ConfigurationType").text(cfg.type);
@@ -357,7 +367,7 @@ xml.Element* append(P)(ref P parent, in CppProject proj)
     }
     foreach(cfg; proj.configs) {
       with(child("PropertyGroup")) {
-        attr("Condition", `'$(Configuration)|$(Platform)'=='%s|%s'`.format(cfg.name, cfg.platform));
+        attr("Condition", `'$(Configuration)|$(Platform)'=='%s|%s'`.format(cfg.name, cfg.architecture));
         if(cfg.linkIncremental) {
           child("LinkIncremental").text(cfg.linkIncremental.unwrap().to!string());
         }
@@ -367,7 +377,7 @@ xml.Element* append(P)(ref P parent, in CppProject proj)
     foreach(cfg; proj.configs) {
       auto n = child("ItemDefinitionGroup");
       with(n) {
-        attr("Condition", `'$(Configuration)|$(Platform)'=='%s|%s'`.format(cfg.name, cfg.platform));
+        attr("Condition", `'$(Configuration)|$(Platform)'=='%s|%s'`.format(cfg.name, cfg.architecture));
         (*n).append(cfg.clCompile);
         (*n).append(cfg.link);
       }
