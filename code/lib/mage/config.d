@@ -83,12 +83,14 @@ shared static this()
   cfgs[1].name = "Release";
   cfgs[1].architecture = "x86";
   defaultProperties.configurations = cfgs;
+  defaultProperties.language = "none";
 }
 
 unittest
 {
-  defaultProperties.configurations.get!(const(Properties)[])[0].name == "Debug";
-  defaultProperties.configurations.get!(const(Properties)[])[0].architecture == "x86";
-  defaultProperties.configurations.get!(const(Properties)[])[1].name == "Release";
-  defaultProperties.configurations.get!(const(Properties)[])[1].architecture == "x86";
+  assert(defaultProperties.configurations.get!(const(Properties[]))()[0].name == "Debug");
+  assert(defaultProperties.configurations.get!(const(Properties[]))()[0].architecture == "x86");
+  assert(defaultProperties.configurations.get!(const(Properties[]))()[1].name == "Release");
+  assert(defaultProperties.configurations.get!(const(Properties[]))()[1].architecture == "x86");
+  assert(defaultProperties.language.get!(const(string))() == "none");
 }

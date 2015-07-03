@@ -50,22 +50,21 @@ class Library : Target
 interface ITargetFactory
 {
   abstract @property Path filePath() const;
+  abstract @property string targetName() const;
   abstract Target create();
 }
 
 __gshared ITargetFactory[] targetFactories;
 
-class TargetFactory(T) : ITargetFactory
+class TargetFactory(TargetType) : ITargetFactory
 {
   import std.stdio;
 private:
   Path _filePath;
 
 public:
-
   override @property Path filePath() const { return _filePath; }
-
-  alias TargetType = T;
+  override @property string targetName() const { return TargetType.stringof; }
   
   this(Path filePath) {
     _filePath = filePath;

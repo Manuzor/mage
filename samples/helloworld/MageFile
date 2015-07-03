@@ -2,6 +2,10 @@ import mage;
 import std.algorithm;
 import std.array;
 
+shared static this() {
+  globalProperties.language = "cpp";
+}
+
 class Hello : Executable
 {
   this()

@@ -11,12 +11,40 @@ mixin RegisterGenerator!(VS2013Generator, "vs2013");
 
 class VS2013Generator : IGenerator
 {
+  string[] supportedLanguages;
+
+  this()
+  {
+    supportedLanguages ~= "cpp";
+  }
+
   override void generate(Target[] targets)
   {
+    auto defaultLang = defaultProperties.tryGet("language");
+    assert(defaultLang, `[bug] Missing global property "language".`);
+    targetProcessing:
     foreach(target; targets)
     {
-      auto proj = cppProject(target);
-      proj.generateVcxproj(Path("%s.vcxproj".format(target.name.get!string())));
+      auto _ = Log.Block(`Processing target "%s"`.format(target.name));
+
+      auto langPtr = target.properties.tryGet("language", globalProperties, defaultProperties);
+      auto lang = langPtr.get!(const(string));
+      if(langPtr is defaultLang) {
+        Log.warning(`No explicit "language" property set for target "%s". Falling back to global settings.`.format(target, lang));
+      }
+      Log.info(`Language "%s"`.format(lang));
+      languageProcessing: foreach(supportedLang; supportedLanguages)
+      {
+        if(lang != supportedLang) {
+          continue languageProcessing;
+        }
+
+        auto proj = cppProject(target);
+        proj.generateVcxproj(Path("%s.vcxproj".format(target.name.get!string())));
+        continue targetProcessing;
+      }
+
+      assert(0, `Unsupported language: "%s"; Supported languages: [%-(%s, %)]`.format(lang, supportedLanguages));
     }
   }
 
