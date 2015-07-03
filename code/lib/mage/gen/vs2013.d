@@ -22,9 +22,8 @@ class VS2013Generator : IGenerator
 
   CppProject cppProject(Target target)
   {
-    logf("Target: %s", target.to!string);
     auto sourceFiles = target.sourceFiles.get!(const(Path)[]);
-    logf("Source Files: %(\n  %s%)", sourceFiles);
+    Log.info("Source Files: %-(%s, %)".format(sourceFiles));
 
     const(Properties)[] cfgs = target.properties.tryGet("configurations", globalProperties, defaultProperties)
                                                 .enforce("No configurations found")
@@ -34,9 +33,9 @@ class VS2013Generator : IGenerator
     {
       CppConfig cfg;
       cfg.setNameFrom(cfgProps).enforce("A configuration needs a name!");
-      log("Configuration: %s".format(cfg.name));
+      Log.info("Configuration: %s".format(cfg.name));
       cfg.setArchitectureFrom(cfgProps, globalProperties, defaultProperties).enforce("A configuration needs an architecture!");
-      log("Architecture: %s".format(cfg.architecture));
+      Log.info("Architecture: %s".format(cfg.architecture));
       cfg.setTypeFrom(target.properties);
       cfg.setUseDebugLibsFrom(cfgProps, globalProperties, defaultProperties);
       cfg.platformToolset = "v120";
@@ -59,7 +58,7 @@ void generateVcxproj(in CppProject proj, in Path outFile)
 
   xml.Doc doc;
   doc.append(proj);
-  log("Writing vcxproj file to: %s".format(outFile));
+  Log.info("Writing vcxproj file to: %s".format(outFile));
   auto s = FileStream(outFile);
   xml.serialize(s, doc);
 }
@@ -104,7 +103,7 @@ struct CppConfig
       return [ "Disabled", "MinSize", "MaxSpeed", "Full" ][level];
     }
     catch(core.exception.RangeError) {
-      warning("Unsupported warning level '%'".format(level));
+      Log.warning("Unsupported warning level '%'".format(level));
     }
     return null;
   }
