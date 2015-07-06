@@ -7,6 +7,11 @@ abstract class Target
 {
   Properties _properties;
 
+  this()
+  {
+    // TODO Source file properties.
+  }
+
   @property ref inout(Properties) properties() inout {
     return _properties;
   }

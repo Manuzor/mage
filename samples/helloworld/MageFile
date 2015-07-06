@@ -2,43 +2,24 @@ import mage;
 import std.algorithm;
 import std.array;
 
-shared static this() {
+// Initialize some global properties.
+
+shared static this()
+{
+  // Set the project's name.
+  globalProperties.name = "hello world";
+  // This is a C++ project.
   globalProperties.language = "cpp";
 }
+
+// Declare a target as a subclass of 'Target'. You can use
+// the predefined special targets 'Executable' and 'Library'.
 
 class Hello : Executable
 {
   this()
   {
     this.name = "hello";
-    this.sourceFiles = [
-      "hello.cpp"
-    ].map!(a => Path(a)).filter!(a => a.exists && a.isFile).array;
-    //Properties compiler;
-    //compiler.warningLevel = 4;
-    //this.compiler = compiler;
+    this.sourceFiles = [ Path("hello.cpp") ];
   }
 }
-
-/*
-class LibHello : Library
-{
-  this()
-  {
-    // Set the default library type.
-    super(LibraryType.Static);
-    name = "libhello";
-    sourceFiles ~= [
-      "hello.cpp"
-    ].map!(a => Path(a)).filter!(a => a.isFile).array;
-  }
-
-  override void configure(in Properties context)
-  {
-    // If compiling with msvc, compile as dll.
-    if(context.compiler == "msvc") {
-      this.libType = LibraryType.Shared;
-    }
-  }
-}
-*/

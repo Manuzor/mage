@@ -4,6 +4,7 @@ import mage;
 import xml = mage.util.xml;
 import std.format : format;
 import std.conv : to;
+import std.uuid;
 import mage.util.option;
 import mage.util.reflection;
 
@@ -11,19 +12,24 @@ mixin RegisterGenerator!(VS2013Generator, "vs2013");
 
 class VS2013Generator : IGenerator
 {
-  string[] supportedLanguages;
+  static string[] supportedLanguages;
 
-  this()
+  shared static this()
   {
     supportedLanguages ~= "cpp";
   }
 
   override void generate(Target[] targets)
   {
+    CppProject[] projects;
+    auto slnName = globalProperties.tryGet("name")
+                                   .enforce("Global name must be set.")
+                                   .get!(const(string))();
+    auto _generateBlock = Log.Block(`Generating for project "%s"`, slnName);
+
     auto defaultLang = defaultProperties.tryGet("language");
     assert(defaultLang, `[bug] Missing global property "language".`);
-    targetProcessing:
-    foreach(target; targets)
+    targetProcessing: foreach(target; targets)
     {
       auto _ = Log.Block(`Processing target "%s"`.format(target.name));
 
@@ -40,44 +46,155 @@ class VS2013Generator : IGenerator
         }
 
         auto proj = cppProject(target);
-        proj.generateVcxproj(Path("%s.vcxproj".format(target.name.get!string())));
+        projects ~= proj;
         continue targetProcessing;
       }
 
       assert(0, `Unsupported language: "%s"; Supported languages: [%-(%s, %)]`.format(lang, supportedLanguages));
     }
-  }
 
-  CppProject cppProject(Target target)
-  {
-    auto sourceFiles = target.sourceFiles.get!(const(Path)[]);
-    Log.info("Source Files: %-(%s, %)".format(sourceFiles));
-
-    const(Properties)[] cfgs = target.properties.tryGet("configurations", globalProperties, defaultProperties)
-                                                .enforce("No configurations found")
-                                                .get!(const(Properties)[]);
-    CppProject proj;
-    foreach(ref cfgProps; cfgs)
-    {
-      CppConfig cfg;
-      cfg.setNameFrom(cfgProps).enforce("A configuration needs a name!");
-      Log.info("Configuration: %s".format(cfg.name));
-      cfg.setArchitectureFrom(cfgProps, globalProperties, defaultProperties).enforce("A configuration needs an architecture!");
-      Log.info("Architecture: %s".format(cfg.architecture));
-      cfg.setTypeFrom(target.properties);
-      cfg.setUseDebugLibsFrom(cfgProps, globalProperties, defaultProperties);
-      cfg.platformToolset = "v120";
-      cfg.characterSet = "Unicode";
-      cfg.wholeProgramOptimization = true;
-      cfg.linkIncremental = true;
-      cfg.setClCompileFrom(cfgProps, globalProperties, defaultProperties);
-      cfg.setLinkFrom(cfgProps, globalProperties, defaultProperties);
-
-      proj.configs.length += 1;
-      proj.configs[$-1] = cfg;
+    // Generate the vcxproj files
+    foreach(proj; projects) {
+      auto filePath = Path(proj.name) ~ "%s.vcxproj".format(proj.name);
+      generateVcxproj(proj, filePath);
     }
-    return proj;
+
+    // Generate .sln file
+    generateSln(projects, Path("%s.sln".format(slnName)));
   }
+}
+
+void generateSln(CppProject[] projects, in Path slnPath)
+{
+  // Collect all possible configurations.
+  string[string] cfgs;
+  foreach(proj; projects)
+  {
+    foreach(cfg; proj.configs)
+    {
+      auto cfgString = "%s|%s".format(cfg.name, cfg.architecture);
+      cfgs[cfgString] = cfgString;
+    }
+  }
+
+  import mage.util.stream;
+  if(!slnPath.parent.exists) {
+    slnPath.parent.mkdir();
+  }
+  auto stream = FileStream(slnPath);
+  stream.indentString = "\t";
+  
+  // Header
+  stream.writeln(`Microsoft Visual Studio Solution File, Format Version 12.00`);
+  stream.writeln(`# Visual Studio 2013`);
+
+  foreach(proj; projects) {
+    auto typeID = "{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}";
+    auto projGuidString = "{%s}".format(proj.guid).toUpper();
+    auto projFilePath = Path(proj.name) ~ "%s.vcxproj".format(proj.name);
+    stream.writeln(`Project("%s") = "%s", "%s", "%s"`.format(typeID, proj.name, projFilePath, projGuidString));
+    stream.indent();
+    scope(exit) {
+      stream.dedent();
+      stream.writeln("EndProject");
+    }
+
+    stream.writeln(`ProjectSection(ProjectDependencies) = postProject`);
+    stream.indent();
+    scope(exit) {
+      stream.dedent();
+      stream.writeln("EndProjectSection");
+    }
+  }
+
+  // Global
+  {
+    stream.writeln("Global");
+    stream.indent();
+    scope(exit) {
+      stream.dedent();
+      stream.writeln("EndGlobal");
+    }
+
+    {
+      stream.writeln("GlobalSection(SolutionConfigurationPlatforms) = preSolution");
+      stream.indent();
+      scope(exit) {
+        stream.dedent();
+        stream.writeln("EndGlobalSection");
+      }
+      foreach(cfg, _; cfgs) {
+        stream.writeln("%s = %s".format(cfg, cfg));
+      }
+    }
+
+    {
+      stream.writeln("GlobalSection(ProjectConfigurationPlatforms) = postSolution");
+      stream.indent();
+      scope(exit) {
+        stream.dedent();
+        stream.writeln("EndGlobalSection");
+      }
+      // TODO
+      //stream.writeln("# TODO");
+      foreach(proj; projects) {
+        auto guidString = "{%s}".format(proj.guid).toUpper();
+        foreach(cfg; proj.configs) {
+          auto cfgString = "%s|%s".format(cfg.name, cfg.architecture);
+          stream.writeln("%s.%s.ActiveCfg = %s".format(guidString, cfgString, cfgString));
+          stream.writeln("%s.%s.Build.0 = %s".format(guidString, cfgString, cfgString));
+        }
+      }
+    }
+    {
+      stream.writeln("GlobalSection(ExtensibilityGlobals) = postSolution");
+      stream.indent();
+      scope(exit) {
+        stream.dedent();
+        stream.writeln("EndGlobalSection");
+      }
+    }
+    {
+      stream.writeln("GlobalSection(ExtensibilityAddIns) = postSolution");
+      stream.indent();
+      scope(exit) {
+        stream.dedent();
+        stream.writeln("EndGlobalSection");
+      }
+    }
+  } // Global
+}
+
+CppProject cppProject(Target target)
+{
+  auto name = target.properties.tryGet("name")
+                               .enforce("Target must have a name!")
+                               .get!(const(string));
+  const(Properties)[] cfgs = target.properties.tryGet("configurations", globalProperties, defaultProperties)
+                                              .enforce("No configurations found")
+                                              .get!(const(Properties)[]);
+  auto proj = CppProject(name);
+  foreach(ref cfgProps; cfgs)
+  {
+    CppConfig cfg;
+    cfg.setNameFrom(cfgProps).enforce("A configuration needs a name!");
+    Log.info("Configuration: %s".format(cfg.name));
+    cfg.setArchitectureFrom(cfgProps, globalProperties, defaultProperties).enforce("A configuration needs an architecture!");
+    Log.info("Architecture: %s".format(cfg.architecture));
+    cfg.setTypeFrom(target.properties);
+    cfg.setUseDebugLibsFrom(cfgProps, globalProperties, defaultProperties);
+    cfg.platformToolset = "v120";
+    cfg.characterSet = "Unicode";
+    cfg.setWholeProgramOptimizationFrom(cfgProps, globalProperties, defaultProperties);
+    cfg.setLinkIncrementalFrom(cfgProps, globalProperties, defaultProperties);
+    cfg.setClCompileFrom(cfgProps, globalProperties, defaultProperties);
+    cfg.setLinkFrom(cfgProps, globalProperties, defaultProperties);
+    cfg.setFilesFrom(cfgProps, target.properties, globalProperties, defaultProperties);
+
+    proj.configs.length += 1;
+    proj.configs[$-1] = cfg;
+  }
+  return proj;
 }
 
 void generateVcxproj(in CppProject proj, in Path outFile)
@@ -87,6 +204,9 @@ void generateVcxproj(in CppProject proj, in Path outFile)
   xml.Doc doc;
   doc.append(proj);
   Log.info("Writing vcxproj file to: %s".format(outFile));
+  if(!outFile.parent.exists) {
+    outFile.parent.mkdir();
+  }
   auto s = FileStream(outFile);
   xml.serialize(s, doc);
 }
@@ -94,10 +214,19 @@ void generateVcxproj(in CppProject proj, in Path outFile)
 struct CppProject
 {
   string name;
+  UUID guid;
   CppConfig[] configs;
   Path[] headers;
   Path[] cpps;
   Path[] otherFiles;
+
+  @disable this();
+
+  this(string name)
+  {
+    this.name = name;
+    this.guid = randomUUID();
+  }
 }
 
 struct CppConfig
@@ -112,6 +241,8 @@ struct CppConfig
   Option!bool linkIncremental;
   ClCompile clCompile;
   Link link;
+  Path[] headerFiles;
+  Path[] cppFiles;
 
 
   static shared string[string] architectureMap;
@@ -149,6 +280,7 @@ bool setNameFrom(P...)(ref CppConfig cfg, in Properties src, in P fallbacks)
 {
   auto pValue = src.tryGet("name", fallbacks);
   if(pValue is null) {
+    Log.warning(`Property "name" not found.`);
     return false;
   }
   cfg.name = pValue.get!(const(string));
@@ -174,6 +306,7 @@ bool setArchitectureFrom(P...)(ref CppConfig cfg, in Properties src, in P fallba
 {
   auto pValue = src.tryGet("architecture", fallbacks);
   if(pValue is null) {
+    Log.warning(`Property "architecture" not found.`);
     return false;
   }
   auto architectureName = pValue.get!(const(string));
@@ -199,6 +332,7 @@ bool setTypeFrom(P...)(ref CppConfig cfg, in Properties src, in P fallbacks)
 {
   auto pValue = src.tryGet("type", fallbacks);
   if(pValue is null) {
+    Log.warning(`Property "type" not found.`);
     return false;
   }
   auto typeName = pValue.get!(const(string))();
@@ -249,6 +383,7 @@ bool setUseDebugLibsFrom(P...)(ref CppConfig cfg, in Properties src, in P fallba
   // not use the debug libs.
   pValue = src.tryGet("name", fallbacks);
   if(pValue is null) {
+    Log.warning(`No "useDebugLibs" Property "name" not found.`);
     return false;
   }
   import std.uni : toLower;
@@ -271,11 +406,42 @@ unittest
   assert(cfg.useDebugLibs.unwrap() == true);
 }
 
+bool setWholeProgramOptimizationFrom(P...)(ref CppConfig cfg, in Properties src, in P fallbacks)
+  if(allSatisfy!(isProperties, P))
+{
+  auto pValue = src.tryGet("wholeProgramOptimization", fallbacks);
+  if(pValue is null) {
+    Log.warning(`Property "wholeProgramOptimization" not found.`);
+    return false;
+  }
+  if(cfg.useDebugLibs) {
+    Log.warning(`When using debug libs, the option "wholeProgramOptimization" `
+                `cannot be set. Visual Studio itself forbids that. Ignoring the setting for now.`);
+    return false;
+  }
+  cfg.wholeProgramOptimization = pValue.get!(const(bool));
+  return true;
+}
+
+bool setLinkIncrementalFrom(P...)(ref CppConfig cfg, in Properties src, in P fallbacks)
+  if(allSatisfy!(isProperties, P))
+{
+  auto pValue = src.tryGet("linkIncremental", fallbacks);
+  if(pValue is null) {
+    Log.warning(`Property "linkIncremental" not found.`);
+    return false;
+  }
+  // TODO Check which options are not compatible with the incremental linking option.
+  cfg.linkIncremental = pValue.get!(const(bool));
+  return true;
+}
+
 bool setClCompileFrom(P...)(ref CppConfig cfg, in Properties src, in P fallbacks)
   if(allSatisfy!(isProperties, P))
 {
   auto pCompilerProps = src.tryGet("compiler", fallbacks);
   if(pCompilerProps is null) {
+    Log.warning(`Property "compiler" not found.`);
     return false;
   }
   auto props = pCompilerProps.get!(const(Properties))();
@@ -310,11 +476,49 @@ bool setLinkFrom(P...)(ref CppConfig cfg, in Properties src, in P fallbacks)
 {
   auto pLinkerProps = src.tryGet("linker", fallbacks);
   if(pLinkerProps is null) {
+    Log.warning(`Property "linker" not found.`);
     return false;
   }
 
   // TODO
 
+  return true;
+}
+
+bool setFilesFrom(P...)(ref CppConfig cfg, in Properties src, in P fallbacks)
+  if(allSatisfy!(isProperties, P))
+{
+  auto pFiles = src.tryGet("sourceFiles", fallbacks);
+  if(pFiles is null) {
+    Log.warning(`Property "sourceFiles" not found.`);
+    return false;
+  }
+
+  auto pMageFilePath = src.tryGet("mageFilePath", fallbacks);
+  if(pMageFilePath is null) {
+    Log.warning(`Property "mageFilePath" not found.`);
+    return false;
+  }
+
+  auto filesRoot = pMageFilePath.get!(const(Path))().parent;
+  auto files = pFiles.get!(const(Path[]));
+  foreach(file; files.map!(a => cast()a))
+  {
+    auto _block = Log.Block("Processing file: %s", file);
+    if(!file.isAbsolute) {
+      file = filesRoot ~ file;
+      Log.trace("Made path absolute: %s", file);
+    }
+    if(file.extension == ".h") {
+      cfg.headerFiles ~= file;
+    }
+    else if(file.extension == ".cpp") {
+      cfg.cppFiles ~= file;
+    }
+    else {
+      Log.warning("Unknown file type: %s", file.extension);
+    }
+  }
   return true;
 }
 
@@ -409,7 +613,34 @@ xml.Element* append(P)(ref P parent, in CppProject proj)
         (*n).append(cfg.link);
       }
     }
-    with(child("ItemGroup")) {}
+    foreach(cfg; proj.configs) {
+
+      if(cfg.cppFiles.length)
+      {
+        with(child("ItemGroup"))
+        {
+          attr("Condition", `'$(Configuration)|$(Platform)'=='%s|%s'`.format(cfg.name, cfg.architecture));
+          foreach(file; cfg.cppFiles) {
+            with(child("ClCompile")) {
+              attr("Include", file.windowsData);
+            }
+          }
+        }
+      }
+
+      if(cfg.headerFiles.length)
+      {
+        with(child("ItemGroup"))
+        {
+          attr("Condition", `'$(Configuration)|$(Platform)'=='%s|%s'`.format(cfg.name, cfg.architecture));
+          foreach(file; cfg.headerFiles) {
+            with(child("ClInclude")) {
+              attr("Include", file.windowsData);
+            }
+          }
+        }
+      }
+    }
     with(child("Import")) {
       attr("Project", `$(VCTargetsPath)\Microsoft.Cpp.targets`);
     }

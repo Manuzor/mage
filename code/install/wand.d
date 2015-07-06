@@ -23,20 +23,21 @@ auto readGeneratorConfigs(in Path p) {
 
 // Is expected to be run in the `temp` dir that `mage` created.
 int main(string[] args) {
-  auto _ = Log.Block("Wand");
+  Log.info("Running wand.");
   Target[] targets;
   foreach(targetFactory; targetFactories) {
     auto _chdir = ScopedChdir(targetFactory.filePath.parent);
     auto _block = Log.Block(`Creating target %s`, targetFactory.targetName);
 
     auto target = targetFactory.create();
+    target.mageFilePath = targetFactory.filePath;
     targets ~= target;
   }
 
   // Iterate all configured generators and pass all targets.`
   auto cfgs = readGeneratorConfigs(cwd() ~ "gen.cfg");
   foreach(cfg; cfgs) {
-    auto _block = (`Generator "%s"`, cfg.name);
+    Log.info(`Generator "%s"`, cfg.name);
     
     auto path = Path(cfg.name);
     if(!path.exists) {
