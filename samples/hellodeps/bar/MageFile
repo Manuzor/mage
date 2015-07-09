@@ -1,0 +1,18 @@
+module bar;
+import mage;
+import foo;
+
+class Bar : Library
+{
+  @Dependency Foo foo;
+
+  this()
+  {
+    super(LibraryType.Static);
+    this.name = "bar";
+    this.sourceFiles = [
+      Path("bar.h"),
+      Path("bar.cpp"),
+    ];
+  }
+}

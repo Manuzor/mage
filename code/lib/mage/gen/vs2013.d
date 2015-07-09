@@ -46,7 +46,9 @@ class VS2013Generator : IGenerator
         }
 
         auto proj = cppProject(target);
+        proj.target = target;
         projects ~= proj;
+        target.properties.vs2013vcxproj = &projects[$-1];
         continue targetProcessing;
       }
 
@@ -91,6 +93,7 @@ void generateSln(CppProject[] projects, in Path slnPath)
   foreach(proj; projects) {
     auto typeID = "{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}";
     auto projGuidString = "{%s}".format(proj.guid).toUpper();
+    auto _projBlock = Log.forcedBlock("Processing project %s %s", proj.name, projGuidString);
     auto projFilePath = Path(proj.name) ~ "%s.vcxproj".format(proj.name);
     stream.writeln(`Project("%s") = "%s", "%s", "%s"`.format(typeID, proj.name, projFilePath, projGuidString));
     stream.indent();
@@ -99,11 +102,22 @@ void generateSln(CppProject[] projects, in Path slnPath)
       stream.writeln("EndProject");
     }
 
-    stream.writeln(`ProjectSection(ProjectDependencies) = postProject`);
-    stream.indent();
-    scope(exit) {
-      stream.dedent();
-      stream.writeln("EndProjectSection");
+    {
+      stream.writeln(`ProjectSection(ProjectDependencies) = postProject`);
+      stream.indent();
+      scope(exit) {
+        stream.dedent();
+        stream.writeln("EndProjectSection");
+      }
+      auto deps = proj.target.dependencies.get!(const(Target[]));
+      Log.info("Deps: %s", deps.map!(a => "%s {%s}".format(a.name.get!(const(string)), a.vs2013vcxproj.get!(const(CppProject*)).guid.toString().toUpper())));
+      auto projDeps = deps.map!(a => a.properties.vs2013vcxproj.get!(const(CppProject*)));
+      foreach(ref projDep; projDeps)
+      {
+        auto guidString = "{%s}".format(projDep.guid).toUpper();
+        Log.info("Writing project dep: %s", guidString);
+        stream.writeln("%s = %s".format(guidString, guidString));
+      }
     }
   }
 
@@ -219,6 +233,7 @@ struct CppProject
   Path[] headers;
   Path[] cpps;
   Path[] otherFiles;
+  Target target;
 
   @disable this();
 
@@ -343,15 +358,18 @@ bool setTypeFrom(P...)(ref CppConfig cfg, in Properties src, in P fallbacks)
     case "library":
     {
       auto libType = src.tryGet("libType", fallbacks)
-                        .enforce("")
+                        .enforce(`A "library" needs a "libType" property of type "mage.target.LibraryType".`)
                         .get!(const(LibraryType))();
       final switch(libType)
       {
-        case LibraryType.Static: assert(0, "Not implemented");
-        case LibraryType.Shared: assert(0, "Not implemented");
+        case LibraryType.Static:
+          cfg.type = "StaticLibrary";
+          break;
+        case LibraryType.Shared: assert(0, "Not implemented (case LibraryType.Shared)");
       }
+      break;
     }
-    default: assert(0, "Not implemented");
+    default: assert(0, "Not implemented (Config type)");
   }
 
   return true;
@@ -450,7 +468,7 @@ bool setClCompileFrom(P...)(ref CppConfig cfg, in Properties src, in P fallbacks
       clCompile.warningLevel = CppConfig.trWarningLevel(pValue.get!(const(int))());
     }
     if(auto pValue = props.tryGet("pch")) {
-      assert(0, "Not implemented");
+      assert(0, "Not implemented (handling of pch property)");
     }
     if(auto pValue = props.tryGet("optimization")) {
       clCompile.optimization = CppConfig.trOptimization(pValue.get!(const(int))());

@@ -1,0 +1,15 @@
+module foo;
+import mage;
+
+class Foo : Library
+{
+  this()
+  {
+    super(LibraryType.Static);
+    this.name = "foo";
+    this.sourceFiles = [
+      Path("foo.h"),
+      Path("foo.cpp"),
+    ];
+  }
+}

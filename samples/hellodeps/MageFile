@@ -1,0 +1,7 @@
+import mage;
+
+shared static this()
+{
+  globalProperties.name = "dependencies sample";
+  globalProperties.language = "cpp";
+}

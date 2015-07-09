@@ -42,6 +42,13 @@ struct Log
     }
   }
 
+  static auto forcedBlock(Args...)(Args args)
+  {
+    auto b = Block(args);
+    printBlocks();
+    return b;
+  }
+
 static:
   Block*[] blocks;
 

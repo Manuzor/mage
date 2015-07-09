@@ -18,7 +18,7 @@ struct Properties
   }
 
   @property ref inout(Variant) opDispatch(string key)() inout {
-    return *enforce(tryGet(key), "Key does not exist. To check whether it does, use tryGet(<key>).");
+    return *enforce(tryGet(key), `Key "` ~ key ~ `" does not exist. To check whether it does, use tryGet(<key>).`);
   }
 
   inout(Variant)* tryGet(Args...)(in string key, auto ref inout Args fallbacks) inout

@@ -1,0 +1,16 @@
+module baz;
+import mage;
+import bar;
+
+class Baz : Executable
+{
+  @Dependency Bar barTarget;
+
+  this()
+  {
+    this.name = "baz";
+    this.sourceFiles = [
+      Path("baz.cpp")
+    ];
+  }
+}
