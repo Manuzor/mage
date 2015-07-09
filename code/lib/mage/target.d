@@ -56,7 +56,7 @@ class Library : Target
 }
 
 
-/// UDA to decorate a dependency field with.
+/// User-defined Attribute (UDA) to decorate a dependency field with.
 struct Dependency
 {
 }
@@ -137,7 +137,7 @@ mixin template registerMageFile(alias T, alias filePath)
             static if(!__traits(compiles, new Type())) {
               debug(PragmaMsg) { pragma(msg, "[mage]   WARNING: Target is not instantiable with `new`."); }
             }
-            Log.info("Wrapping " ~ Type.stringof);
+            log.info("Wrapping " ~ Type.stringof);
             wrappedTargets ~= new TargetWrapper!Type(Path(filePath));
           }
         }

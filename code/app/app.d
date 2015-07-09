@@ -45,8 +45,8 @@ void compile(in CompilationData data) {
 
   // Create a command from the compilation data
   auto cmd = data.makeCommand();
-  Log.info("Compiling: %-(%s %)", cmd);
-  Log.info("Compiling: %s", cmd);
+  log.info("Compiling: %-(%s %)", cmd);
+  log.info("Compiling: %s", cmd);
 
   // Invoke the full compilation command.
   spawnProcess(cmd).wait();
@@ -63,7 +63,7 @@ mixin M_MageFileMixin;
 auto transformMageFile(in Path srcRoot, in Path mageFile, in Path outDir) {
   auto base = mageFile.resolved().relativeTo(srcRoot.resolved().parent).parent;
   import std.stdio;
-  Log.info("srcRoot: %s | base: %s", srcRoot, base);
+  log.info("srcRoot: %s | base: %s", srcRoot, base);
   auto dest = outDir ~ format("%s.d", base);
   if(!dest.parent.exists) {
     dest.parent.mkdir(true);
@@ -115,17 +115,17 @@ int main(string[] args)
 
   auto sourceDir = Path(args[1]);
   if(!sourceDir.exists) {
-    Log.error("Given source directory does not exist: %s".format(sourceDir));
+    log.error("Given source directory does not exist: %s".format(sourceDir));
   }
 
   auto mageFiles = sourceDir.glob("MageFile", SpanMode.breadth).array;
 
   if(mageFiles.empty) {
-    Log.error("Unable to find any MageFile in: %s".format(sourceDir));
+    log.error("Unable to find any MageFile in: %s".format(sourceDir));
     return 3;
   }
 
-  Log.info("MageFiles: %(\n  %s%)", mageFiles);
+  log.info("MageFiles: %(\n  %s%)", mageFiles);
 
   string[string] manifest;
   auto outDir = tempDir ~ "src";
@@ -137,7 +137,7 @@ int main(string[] args)
   }
 
   dumpManifest(manifest, tempDir ~ "MageSourceManifest.json");
-  Log.info("Manifest: %s", manifest);
+  log.info("Manifest: %s", manifest);
 
   CompilationData data;
   debug data.flags ~= "-debug";

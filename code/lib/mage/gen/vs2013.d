@@ -25,20 +25,20 @@ class VS2013Generator : IGenerator
     auto slnName = globalProperties.tryGet("name")
                                    .enforce("Global name must be set.")
                                    .get!(const(string))();
-    auto _generateBlock = Log.Block(`Generating for project "%s"`, slnName);
+    auto _generateBlock = log.Block(`Generating for project "%s"`, slnName);
 
     auto defaultLang = defaultProperties.tryGet("language");
     assert(defaultLang, `[bug] Missing global property "language".`);
     targetProcessing: foreach(target; targets)
     {
-      auto _ = Log.Block(`Processing target "%s"`.format(target.name));
+      auto _ = log.Block(`Processing target "%s"`.format(target.name));
 
       auto langPtr = target.properties.tryGet("language", globalProperties, defaultProperties);
       auto lang = langPtr.get!(const(string));
       if(langPtr is defaultLang) {
-        Log.warning(`No explicit "language" property set for target "%s". Falling back to global settings.`.format(target, lang));
+        log.warning(`No explicit "language" property set for target "%s". Falling back to global settings.`.format(target, lang));
       }
-      Log.info(`Language "%s"`.format(lang));
+      log.info(`Language "%s"`.format(lang));
       languageProcessing: foreach(supportedLang; supportedLanguages)
       {
         if(lang != supportedLang) {
@@ -93,7 +93,7 @@ void generateSln(CppProject[] projects, in Path slnPath)
   foreach(proj; projects) {
     auto typeID = "{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}";
     auto projGuidString = "{%s}".format(proj.guid).toUpper();
-    auto _projBlock = Log.forcedBlock("Processing project %s %s", proj.name, projGuidString);
+    auto _projBlock = log.forcedBlock("Processing project %s %s", proj.name, projGuidString);
     auto projFilePath = Path(proj.name) ~ "%s.vcxproj".format(proj.name);
     stream.writeln(`Project("%s") = "%s", "%s", "%s"`.format(typeID, proj.name, projFilePath, projGuidString));
     stream.indent();
@@ -110,12 +110,12 @@ void generateSln(CppProject[] projects, in Path slnPath)
         stream.writeln("EndProjectSection");
       }
       auto deps = proj.target.dependencies.get!(const(Target[]));
-      Log.info("Deps: %s", deps.map!(a => "%s {%s}".format(a.name.get!(const(string)), a.vs2013vcxproj.get!(const(CppProject*)).guid.toString().toUpper())));
+      log.info("Deps: %s", deps.map!(a => "%s {%s}".format(a.name.get!(const(string)), a.vs2013vcxproj.get!(const(CppProject*)).guid.toString().toUpper())));
       auto projDeps = deps.map!(a => a.properties.vs2013vcxproj.get!(const(CppProject*)));
       foreach(ref projDep; projDeps)
       {
         auto guidString = "{%s}".format(projDep.guid).toUpper();
-        Log.info("Writing project dep: %s", guidString);
+        log.info("Writing project dep: %s", guidString);
         stream.writeln("%s = %s".format(guidString, guidString));
       }
     }
@@ -192,9 +192,9 @@ CppProject cppProject(Target target)
   {
     CppConfig cfg;
     cfg.setNameFrom(cfgProps).enforce("A configuration needs a name!");
-    Log.info("Configuration: %s".format(cfg.name));
+    log.info("Configuration: %s".format(cfg.name));
     cfg.setArchitectureFrom(cfgProps, globalProperties, defaultProperties).enforce("A configuration needs an architecture!");
-    Log.info("Architecture: %s".format(cfg.architecture));
+    log.info("Architecture: %s".format(cfg.architecture));
     cfg.setTypeFrom(target.properties);
     cfg.setUseDebugLibsFrom(cfgProps, globalProperties, defaultProperties);
     cfg.platformToolset = "v120";
@@ -217,7 +217,7 @@ void generateVcxproj(in CppProject proj, in Path outFile)
 
   xml.Doc doc;
   doc.append(proj);
-  Log.info("Writing vcxproj file to: %s".format(outFile));
+  log.info("Writing vcxproj file to: %s".format(outFile));
   if(!outFile.parent.exists) {
     outFile.parent.mkdir();
   }
@@ -277,7 +277,7 @@ struct CppConfig
       return [ "Disabled", "MinSize", "MaxSpeed", "Full" ][level];
     }
     catch(core.exception.RangeError) {
-      Log.warning("Unsupported warning level '%'".format(level));
+      log.warning("Unsupported warning level '%'".format(level));
     }
     return null;
   }
@@ -295,7 +295,7 @@ bool setNameFrom(P...)(ref CppConfig cfg, in Properties src, in P fallbacks)
 {
   auto pValue = src.tryGet("name", fallbacks);
   if(pValue is null) {
-    Log.warning(`Property "name" not found.`);
+    log.warning(`Property "name" not found.`);
     return false;
   }
   cfg.name = pValue.get!(const(string));
@@ -321,7 +321,7 @@ bool setArchitectureFrom(P...)(ref CppConfig cfg, in Properties src, in P fallba
 {
   auto pValue = src.tryGet("architecture", fallbacks);
   if(pValue is null) {
-    Log.warning(`Property "architecture" not found.`);
+    log.warning(`Property "architecture" not found.`);
     return false;
   }
   auto architectureName = pValue.get!(const(string));
@@ -347,7 +347,7 @@ bool setTypeFrom(P...)(ref CppConfig cfg, in Properties src, in P fallbacks)
 {
   auto pValue = src.tryGet("type", fallbacks);
   if(pValue is null) {
-    Log.warning(`Property "type" not found.`);
+    log.warning(`Property "type" not found.`);
     return false;
   }
   auto typeName = pValue.get!(const(string))();
@@ -401,7 +401,7 @@ bool setUseDebugLibsFrom(P...)(ref CppConfig cfg, in Properties src, in P fallba
   // not use the debug libs.
   pValue = src.tryGet("name", fallbacks);
   if(pValue is null) {
-    Log.warning(`No "useDebugLibs" Property "name" not found.`);
+    log.warning(`No "useDebugLibs" Property "name" not found.`);
     return false;
   }
   import std.uni : toLower;
@@ -429,11 +429,11 @@ bool setWholeProgramOptimizationFrom(P...)(ref CppConfig cfg, in Properties src,
 {
   auto pValue = src.tryGet("wholeProgramOptimization", fallbacks);
   if(pValue is null) {
-    Log.warning(`Property "wholeProgramOptimization" not found.`);
+    log.warning(`Property "wholeProgramOptimization" not found.`);
     return false;
   }
   if(cfg.useDebugLibs) {
-    Log.warning(`When using debug libs, the option "wholeProgramOptimization" `
+    log.warning(`When using debug libs, the option "wholeProgramOptimization" `
                 `cannot be set. Visual Studio itself forbids that. Ignoring the setting for now.`);
     return false;
   }
@@ -446,7 +446,7 @@ bool setLinkIncrementalFrom(P...)(ref CppConfig cfg, in Properties src, in P fal
 {
   auto pValue = src.tryGet("linkIncremental", fallbacks);
   if(pValue is null) {
-    Log.warning(`Property "linkIncremental" not found.`);
+    log.warning(`Property "linkIncremental" not found.`);
     return false;
   }
   // TODO Check which options are not compatible with the incremental linking option.
@@ -459,7 +459,7 @@ bool setClCompileFrom(P...)(ref CppConfig cfg, in Properties src, in P fallbacks
 {
   auto pCompilerProps = src.tryGet("compiler", fallbacks);
   if(pCompilerProps is null) {
-    Log.warning(`Property "compiler" not found.`);
+    log.warning(`Property "compiler" not found.`);
     return false;
   }
   auto props = pCompilerProps.get!(const(Properties))();
@@ -494,7 +494,7 @@ bool setLinkFrom(P...)(ref CppConfig cfg, in Properties src, in P fallbacks)
 {
   auto pLinkerProps = src.tryGet("linker", fallbacks);
   if(pLinkerProps is null) {
-    Log.warning(`Property "linker" not found.`);
+    log.warning(`Property "linker" not found.`);
     return false;
   }
 
@@ -508,13 +508,13 @@ bool setFilesFrom(P...)(ref CppConfig cfg, in Properties src, in P fallbacks)
 {
   auto pFiles = src.tryGet("sourceFiles", fallbacks);
   if(pFiles is null) {
-    Log.warning(`Property "sourceFiles" not found.`);
+    log.warning(`Property "sourceFiles" not found.`);
     return false;
   }
 
   auto pMageFilePath = src.tryGet("mageFilePath", fallbacks);
   if(pMageFilePath is null) {
-    Log.warning(`Property "mageFilePath" not found.`);
+    log.warning(`Property "mageFilePath" not found.`);
     return false;
   }
 
@@ -522,10 +522,10 @@ bool setFilesFrom(P...)(ref CppConfig cfg, in Properties src, in P fallbacks)
   auto files = pFiles.get!(const(Path[]));
   foreach(file; files.map!(a => cast()a))
   {
-    auto _block = Log.Block("Processing file: %s", file);
+    auto _block = log.Block("Processing file: %s", file);
     if(!file.isAbsolute) {
       file = filesRoot ~ file;
-      Log.trace("Made path absolute: %s", file);
+      log.trace("Made path absolute: %s", file);
     }
     if(file.extension == ".h") {
       cfg.headerFiles ~= file;
@@ -534,7 +534,7 @@ bool setFilesFrom(P...)(ref CppConfig cfg, in Properties src, in P fallbacks)
       cfg.cppFiles ~= file;
     }
     else {
-      Log.warning("Unknown file type: %s", file.extension);
+      log.warning("Unknown file type: %s", file.extension);
     }
   }
   return true;

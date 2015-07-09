@@ -30,24 +30,24 @@ const(TypeInfo)[] targetOrder(ITargetWrapper[] targets)
     import std.random;
     randomShuffle(targets);
   }
-  debug(LogResolveDeps) Log.info("Original Target Order: %-(\n       %s%)", targets.map!(a => a.wrappedTypeInfo));
+  debug(LogResolveDeps) log.info("Original Target Order: %-(\n       %s%)", targets.map!(a => a.wrappedTypeInfo));
 
   const(TypeInfo)[] queue;
   void helper(ref const(TypeInfo)[] queue, const(ITargetWrapper) wrapper)
   {
-    auto _begin = Log.Block("%s", wrapper.targetName);
-    debug(LogResolveDeps) Log.info("Deps: %s", wrapper.dependencies);
+    auto _begin = log.Block("%s", wrapper.targetName);
+    debug(LogResolveDeps) log.info("Deps: %s", wrapper.dependencies);
     foreach(dep; wrapper.dependencies)
     {
       helper(queue, targets.find!(a => a.wrappedTypeInfo == dep)[0]);
     }
     if(!queue.canFind!(a => a == wrapper.wrappedTypeInfo)) {
       queue ~= wrapper.wrappedTypeInfo;
-      debug(LogResolveDeps) Log.info("[add]");
+      debug(LogResolveDeps) log.info("[add]");
     }
     else
     {
-      debug(LogResolveDeps) Log.info("[skip]");
+      debug(LogResolveDeps) log.info("[skip]");
     }
   }
   foreach(wrapper; targets)
@@ -55,7 +55,7 @@ const(TypeInfo)[] targetOrder(ITargetWrapper[] targets)
     helper(queue, wrapper);
   }
 
-  debug(LogResolveDeps) Log.info("Sorted Target Type Infos (Queue):%-(\n       %s%)", queue);
+  debug(LogResolveDeps) log.info("Sorted Target Type Infos (Queue):%-(\n       %s%)", queue);
 
   return queue;
 }
@@ -63,7 +63,7 @@ const(TypeInfo)[] targetOrder(ITargetWrapper[] targets)
 // Is expected to be run in the `temp` dir that `mage` created.
 int main(string[] args)
 {
-  Log.info("Running wand.");
+  log.info("Running wand.");
   Target[] targets;
 
   auto order = targetOrder(wrappedTargets);
@@ -71,19 +71,19 @@ int main(string[] args)
   foreach(ti; order) {
     auto wrapper = wrappedTargets.find!(a => a.wrappedTypeInfo == ti)[0];
     auto _chdir = ScopedChdir(wrapper.filePath.parent);
-    auto _block = Log.Block(`Creating target %s`, wrapper.targetName);
+    auto _block = log.Block(`Creating target %s`, wrapper.targetName);
 
     auto target = wrapper.create();
     target.mageFilePath = wrapper.filePath;
     target.dependencies = wrapper.dependencies.map!(a => targets.find!(t => a == typeid(t))[0]).array;
-    Log.info("Target deps: %s", wrapper.dependencies);
+    log.info("Target deps: %s", wrapper.dependencies);
     targets ~= target;
   }
 
   // Iterate all configured generators and pass all targets.`
   auto cfgs = readGeneratorConfigs(cwd() ~ "gen.cfg");
   foreach(cfg; cfgs) {
-    Log.info(`Generator "%s"`, cfg.name);
+    log.info(`Generator "%s"`, cfg.name);
     
     auto path = Path(cfg.name);
     if(!path.exists) {
