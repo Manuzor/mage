@@ -21,6 +21,18 @@ class VS2013Generator : IGenerator
 
   override void generate(Target[] targets)
   {
+    auto lang = globalProperties.language.get!(const(string))();
+    switch(lang)
+    {
+      case "cpp":
+        generateCpp(targets);
+        break;
+      default: assert(0, "Unsupported language for generator vs2013: %s".format(lang));
+    }
+  }
+
+  void generateCpp(Target[] targets)
+  {
     CppProject[] projects;
     auto slnName = globalProperties.tryGet("name")
                                    .enforce("Global name must be set.")

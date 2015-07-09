@@ -2,17 +2,21 @@ module bar;
 import mage;
 import foo;
 
-class Bar : Library
+class Bar : StaticLibrary
 {
   @Dependency Foo foo;
 
-  this()
+  override void configure()
   {
-    super(LibraryType.Static);
     this.name = "bar";
     this.sourceFiles = [
       Path("bar.h"),
       Path("bar.cpp"),
     ];
+
+    with(log.Block("Target Bar"))
+    {
+      log.info("Check it out, this is my dependency foo: %s", foo);
+    }
   }
 }

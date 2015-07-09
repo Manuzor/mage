@@ -1,11 +1,10 @@
 module foo;
 import mage;
 
-class Foo : Library
+class Foo : StaticLibrary
 {
-  this()
+  override void configure()
   {
-    super(LibraryType.Static);
     this.name = "foo";
     this.sourceFiles = [
       Path("foo.h"),

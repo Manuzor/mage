@@ -6,7 +6,7 @@ class Baz : Executable
 {
   @Dependency Bar barTarget;
 
-  this()
+  override void configure()
   {
     this.name = "baz";
     this.sourceFiles = [

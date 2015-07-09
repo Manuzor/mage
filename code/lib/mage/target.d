@@ -10,6 +10,7 @@ import std.variant;
 abstract class Target
 {
   Properties _properties;
+  const(Properties)* context;
 
   this()
   {
@@ -28,12 +29,11 @@ abstract class Target
     return properties().opDispatch!(key)();
   }
 
-  /// Context sensitive configure step.
-  void configure(in Properties context) {}
+  void configure() {}
 }
 
 
-class Executable : Target
+abstract class Executable : Target
 {
   this() {
     properties.type = "executable";
@@ -47,12 +47,22 @@ enum LibraryType
   Shared
 }
 
-class Library : Target
+abstract class Library : Target
 {
   this(LibraryType libType) {
     properties.type = "library";
     properties.libType = libType;
   }
+}
+
+abstract class StaticLibrary : Library
+{
+  this() { super(LibraryType.Static); }
+}
+
+abstract class SharedLibrary : Library
+{
+  this() { super(LibraryType.Shared); }
 }
 
 
@@ -68,6 +78,7 @@ interface ITargetWrapper
   abstract @property string targetName() const;
   abstract @property const(TypeInfo) wrappedTypeInfo() const;
   abstract @property const(TypeInfo)[] dependencies() const;
+  abstract void setDependencyInstance(Target target, Target dependency);
   abstract Target create();
 }
 
@@ -77,14 +88,21 @@ class TargetWrapper(TargetType) : ITargetWrapper
 {
   import std.stdio;
 private:
+  alias DependencySetter = void function(Target, Target);
+
   Path _filePath;
-  TypeInfo[] _dependencies;
+  DependencySetter[TypeInfo] _dependencies;
 
 public:
   override @property Path filePath() const { return _filePath; }
   override @property string targetName() const { return TargetType.stringof; }
   override @property const(TypeInfo) wrappedTypeInfo() const { return typeid(TargetType); }
-  override @property const(TypeInfo)[] dependencies() const { return _dependencies; }
+  override @property const(TypeInfo)[] dependencies() const { return _dependencies.keys; }
+  override void setDependencyInstance(Target target, Target dependency)
+  {
+    log.info("Finding %s...", typeid(dependency));
+    _dependencies[typeid(dependency)](target, dependency);
+  }
 
   this(Path filePath) {
     import mage.util.reflection;
@@ -103,7 +121,10 @@ public:
           {
             static assert(is(typeof(Member) : Target), `Only "Target" types may be decorated with "@Dependency".`);
             debug(PragmaMsg) { pragma(msg, "[mage] +++ Collecting dependency: " ~ typeof(Member).stringof); }
-            this._dependencies ~= typeid(typeof(Member));
+            this._dependencies[typeid(typeof(Member))] = (t, d) // Setter for the member dependency instances
+            {
+              mixin("(cast(TargetType)t)." ~ m ~ " = cast(typeof(TargetType." ~ m ~ "))d;");
+            };
           }
         }
       }

@@ -80,6 +80,34 @@ int main(string[] args)
     targets ~= target;
   }
 
+  with(log.forcedBlock("Set Dependency instances"))
+  {
+    foreach(wrapper; wrappedTargets) {
+      auto target = targets.find!(a => typeid(a) == wrapper.wrappedTypeInfo)[0];
+      foreach(dep; wrapper.dependencies) {
+        auto dependentTarget = targets.find!(a => typeid(a) == dep)[0];
+        wrapper.setDependencyInstance(target, dependentTarget);
+      }
+    }
+  }
+
+  Properties context;
+  with(log.forcedBlock("Set Target Contexts"))
+  {
+    foreach(target; targets)
+    {
+      target.context = &context;
+    }
+  }
+
+  with(log.forcedBlock("Configure Targets"))
+  {
+    foreach(target; targets)
+    {
+      target.configure();
+    }
+  }
+
   // Iterate all configured generators and pass all targets.`
   auto cfgs = readGeneratorConfigs(cwd() ~ "gen.cfg");
   foreach(cfg; cfgs) {
