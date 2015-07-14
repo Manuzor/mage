@@ -21,32 +21,26 @@ class VS2013Generator : IGenerator
 
   override void generate(Target[] targets)
   {
-    auto lang = globalProperties.language.get!(const(string))();
-    switch(lang)
-    {
-      case "cpp":
-        generateCpp(targets);
-        break;
-      default: assert(0, "Unsupported language for generator vs2013: %s".format(lang));
-    }
-  }
-
-  void generateCpp(Target[] targets)
-  {
     CppProject[] projects;
-    auto slnName = globalProperties.tryGet("name")
-                                   .enforce("Global name must be set.")
-                                   .get!(const(string))();
+    auto slnName = *globalProperties.tryGet!string("name")
+                                    .enforce("Global name must be set.");
     auto _generateBlock = log.Block(`Generating for project "%s"`, slnName);
 
-    auto defaultLang = defaultProperties.tryGet("language");
-    assert(defaultLang, `[bug] Missing global property "language".`);
+    auto defaultLang = defaultProperties.tryGet!string("language");
+    assert(defaultLang, `[bug] Missing default property "language" (usually "none").`);
     targetProcessing: foreach(target; targets)
     {
-      auto _ = log.Block(`Processing target "%s"`.format(target.name));
+      auto _ = log.Block(`Processing target "%s"`.format(target.properties.tryGet!string("name")));
 
-      auto langPtr = target.properties.tryGet("language", globalProperties, defaultProperties);
-      auto lang = langPtr.get!(const(string));
+      auto targetType = target.properties.get!string("type", globalProperties, defaultProperties);
+      log.trace(`Target type is "%s"`, targetType);
+      if(targetType == "none") {
+        log.trace(`Skipping target.`);
+        continue;
+      }
+
+      auto langPtr = target.properties.tryGet!string("language", globalProperties, defaultProperties);
+      auto lang = *langPtr;
       if(langPtr is defaultLang) {
         log.warning(`No explicit "language" property set for target "%s". Falling back to global settings.`.format(target, lang));
       }
@@ -57,10 +51,14 @@ class VS2013Generator : IGenerator
           continue languageProcessing;
         }
 
+        Path[][] all = target.properties.getAll!(Path[])("includePaths", globalProperties);
+        Path[] allIncludePaths = all.joiner().array();
+        log.info("Include paths: %(\n...| - %s%)", allIncludePaths);
+        target.properties.set!"includePaths" = allIncludePaths;
         auto proj = cppProject(target);
         proj.target = target;
         projects ~= proj;
-        target.properties.vs2013vcxproj = &projects[$-1];
+        target.properties.set!"vs2013vcxproj" = &projects[$-1];
         continue targetProcessing;
       }
 
@@ -121,9 +119,9 @@ void generateSln(CppProject[] projects, in Path slnPath)
         stream.dedent();
         stream.writeln("EndProjectSection");
       }
-      auto deps = proj.target.dependencies.get!(const(Target[]));
-      log.info("Deps: %s", deps.map!(a => "%s {%s}".format(a.name.get!(const(string)), a.vs2013vcxproj.get!(const(CppProject*)).guid.toString().toUpper())));
-      auto projDeps = deps.map!(a => a.properties.vs2013vcxproj.get!(const(CppProject*)));
+      auto deps = proj.target.properties.get!(Target[])("dependencies");
+      log.info("Deps: %s", deps.map!(a => "%s {%s}".format(a.properties.get!string("name"), a.properties.get!(CppProject*)("vs2013vcxproj").guid.toString().toUpper())));
+      auto projDeps = deps.map!(a => a.properties.get!(CppProject*)("vs2013vcxproj"));
       foreach(ref projDep; projDeps)
       {
         auto guidString = "{%s}".format(projDep.guid).toUpper();
@@ -193,29 +191,27 @@ void generateSln(CppProject[] projects, in Path slnPath)
 
 CppProject cppProject(Target target)
 {
-  auto name = target.properties.tryGet("name")
-                               .enforce("Target must have a name!")
-                               .get!(const(string));
-  const(Properties)[] cfgs = target.properties.tryGet("configurations", globalProperties, defaultProperties)
-                                              .enforce("No configurations found")
-                                              .get!(const(Properties)[]);
+  auto name = *target.properties.tryGet!string("name")
+                                .enforce("Target must have a name!");
+  auto cfgs = *target.properties.tryGet!(Properties[])("configurations", globalProperties, defaultProperties)
+                                .enforce("No configurations found");
   auto proj = CppProject(name);
   foreach(ref cfgProps; cfgs)
   {
     CppConfig cfg;
-    cfg.setNameFrom(cfgProps).enforce("A configuration needs a name!");
+    cfg.setNameFrom(cfgProps, target.properties).enforce("A configuration needs a name!");
     log.info("Configuration: %s".format(cfg.name));
-    cfg.setArchitectureFrom(cfgProps, globalProperties, defaultProperties).enforce("A configuration needs an architecture!");
+    cfg.setArchitectureFrom(cfgProps, target.properties, globalProperties, defaultProperties).enforce("A configuration needs an architecture!");
     log.info("Architecture: %s".format(cfg.architecture));
     cfg.setTypeFrom(target.properties);
-    cfg.setUseDebugLibsFrom(cfgProps, globalProperties, defaultProperties);
+    cfg.setUseDebugLibsFrom(cfgProps, target.properties, globalProperties, defaultProperties);
     cfg.platformToolset = "v120";
     cfg.characterSet = "Unicode";
-    cfg.setWholeProgramOptimizationFrom(cfgProps, globalProperties, defaultProperties);
-    cfg.setLinkIncrementalFrom(cfgProps, globalProperties, defaultProperties);
-    cfg.setClCompileFrom(cfgProps, globalProperties, defaultProperties);
-    cfg.setLinkFrom(cfgProps, globalProperties, defaultProperties);
-    cfg.setFilesFrom(cfgProps, target.properties, globalProperties, defaultProperties);
+    cfg.setWholeProgramOptimizationFrom(cfgProps, target.properties, globalProperties, defaultProperties);
+    cfg.setLinkIncrementalFrom(cfgProps, target.properties, globalProperties, defaultProperties);
+    cfg.setClCompileFrom(cfgProps, target.properties, globalProperties, defaultProperties);
+    cfg.setLinkFrom(cfgProps, target.properties, globalProperties, defaultProperties);
+    cfg.setFilesFrom(cfgProps, target.properties, target.properties, globalProperties, defaultProperties);
 
     proj.configs.length += 1;
     proj.configs[$-1] = cfg;
@@ -305,12 +301,12 @@ shared static this()
 bool setNameFrom(P...)(ref CppConfig cfg, in Properties src, in P fallbacks)
   if(allSatisfy!(isProperties, P))
 {
-  auto pValue = src.tryGet("name", fallbacks);
+  auto pValue = src.tryGet!string("name", fallbacks);
   if(pValue is null) {
     log.warning(`Property "name" not found.`);
     return false;
   }
-  cfg.name = pValue.get!(const(string));
+  cfg.name = *pValue;
   return true;
 }
 
@@ -319,7 +315,7 @@ unittest
   CppConfig cfg;
   Properties props;
   assert(cfg.setNameFrom(props) == false);
-  props.name = "foo";
+  props.set!"name" = "foo";
   assert(cfg.setNameFrom(props) == true);
   assert(cfg.name == "foo");
 
@@ -331,13 +327,12 @@ unittest
 bool setArchitectureFrom(P...)(ref CppConfig cfg, in Properties src, in P fallbacks)
   if(allSatisfy!(isProperties, P))
 {
-  auto pValue = src.tryGet("architecture", fallbacks);
+  auto pValue = src.tryGet!string("architecture", fallbacks);
   if(pValue is null) {
     log.warning(`Property "architecture" not found.`);
     return false;
   }
-  auto architectureName = pValue.get!(const(string));
-  cfg.architecture = CppConfig.trPlatform(architectureName);
+  cfg.architecture = CppConfig.trPlatform(*pValue);
   return true;
 }
 
@@ -346,10 +341,10 @@ unittest
   CppConfig cfg;
   Properties props;
   assert(cfg.setArchitectureFrom(props) == false);
-  props.architecture = "x86_64";
+  props.set!"architecture" = "x86_64";
   assert(cfg.setArchitectureFrom(props) == true);
   assert(cfg.architecture == "x64");
-  props.architecture = "x86";
+  props.set!"architecture" = "x86";
   assert(cfg.setArchitectureFrom(props) == true);
   assert(cfg.architecture == "Win32");
 }
@@ -357,22 +352,20 @@ unittest
 bool setTypeFrom(P...)(ref CppConfig cfg, in Properties src, in P fallbacks)
   if(allSatisfy!(isProperties, P))
 {
-  auto pValue = src.tryGet("type", fallbacks);
+  auto pValue = src.tryGet!string("type", fallbacks);
   if(pValue is null) {
     log.warning(`Property "type" not found.`);
     return false;
   }
-  auto typeName = pValue.get!(const(string))();
-  switch(typeName) {
+  switch(*pValue) {
     case "executable":
       cfg.type = "Application";
       break;
     case "library":
     {
-      auto libType = src.tryGet("libType", fallbacks)
-                        .enforce(`A "library" needs a "libType" property of type "mage.target.LibraryType".`)
-                        .get!(const(LibraryType))();
-      final switch(libType)
+      auto libType = src.tryGet!LibraryType("libType", fallbacks)
+                        .enforce(`A "library" needs a "libType" property of type "mage.target.LibraryType".`);
+      final switch(*libType)
       {
         case LibraryType.Static:
           cfg.type = "StaticLibrary";
@@ -392,7 +385,7 @@ unittest
   CppConfig cfg;
   Properties props;
   assert(cfg.setTypeFrom(props) == false);
-  props.type = "executable";
+  props.set!"type" = "executable";
   assert(cfg.setTypeFrom(props) == true);
   assert(cfg.type == "Application");
 }
@@ -403,21 +396,23 @@ unittest
 bool setUseDebugLibsFrom(P...)(ref CppConfig cfg, in Properties src, in P fallbacks)
   if(allSatisfy!(isProperties, P))
 {
-  auto pValue = src.tryGet("useDebugLibs", fallbacks);
+  auto pValue = src.tryGet!bool("useDebugLibs", fallbacks);
   if(pValue !is null) {
-    cfg.useDebugLibs = pValue.get!(const(bool))();
+    cfg.useDebugLibs = *pValue;
     return true;
   }
   // If "use debug libs" was not explicitly given, try to see if the
   // string "release" is contained in the name. If it is, we will
   // not use the debug libs.
-  pValue = src.tryGet("name", fallbacks);
-  if(pValue is null) {
-    log.warning(`No "useDebugLibs" Property "name" not found.`);
-    return false;
+  auto name = cfg.name;
+  if(name.empty) {
+    // Name not set on config yet. Let's see if we can find the name in the properties.
+    auto pName = src.tryGet!string("name");
+    if(pName is null) {
+      return false;
+    }
+    name = *pName;
   }
-  import std.uni : toLower;
-  auto name = pValue.get!(const(string))();
   bool isRelease = name.canFind!((a, b) => a.toLower() == b.toLower())("release");
   cfg.useDebugLibs = !isRelease;
   return true;
@@ -428,18 +423,22 @@ unittest
   CppConfig cfg;
   Properties props;
   assert(cfg.setUseDebugLibsFrom(props) == false);
-  props.name = "Release";
+  assert(cfg.useDebugLibs.isNone);
+  props.set!"name" = "Release";
   assert(cfg.setUseDebugLibsFrom(props) == true);
+  assert(cfg.useDebugLibs.isSome);
   assert(cfg.useDebugLibs.unwrap() == false);
-  props.name = "Debug";
+  cfg.useDebugLibs.clear();
+  props.set!"name" = "Debug";
   assert(cfg.setUseDebugLibsFrom(props) == true);
+  assert(cfg.useDebugLibs.isSome);
   assert(cfg.useDebugLibs.unwrap() == true);
 }
 
 bool setWholeProgramOptimizationFrom(P...)(ref CppConfig cfg, in Properties src, in P fallbacks)
   if(allSatisfy!(isProperties, P))
 {
-  auto pValue = src.tryGet("wholeProgramOptimization", fallbacks);
+  auto pValue = src.tryGet!bool("wholeProgramOptimization", fallbacks);
   if(pValue is null) {
     log.warning(`Property "wholeProgramOptimization" not found.`);
     return false;
@@ -449,53 +448,58 @@ bool setWholeProgramOptimizationFrom(P...)(ref CppConfig cfg, in Properties src,
                 `cannot be set. Visual Studio itself forbids that. Ignoring the setting for now.`);
     return false;
   }
-  cfg.wholeProgramOptimization = pValue.get!(const(bool));
+  cfg.wholeProgramOptimization = *pValue;
   return true;
 }
 
 bool setLinkIncrementalFrom(P...)(ref CppConfig cfg, in Properties src, in P fallbacks)
   if(allSatisfy!(isProperties, P))
 {
-  auto pValue = src.tryGet("linkIncremental", fallbacks);
+  auto pValue = src.tryGet!bool("linkIncremental", fallbacks);
   if(pValue is null) {
     log.warning(`Property "linkIncremental" not found.`);
     return false;
   }
   // TODO Check which options are not compatible with the incremental linking option.
-  cfg.linkIncremental = pValue.get!(const(bool));
+  cfg.linkIncremental = *pValue;
   return true;
 }
 
 bool setClCompileFrom(P...)(ref CppConfig cfg, in Properties src, in P fallbacks)
   if(allSatisfy!(isProperties, P))
 {
-  auto pCompilerProps = src.tryGet("compiler", fallbacks);
-  if(pCompilerProps is null) {
-    log.warning(`Property "compiler" not found.`);
-    return false;
-  }
-  auto props = pCompilerProps.get!(const(Properties))();
   with(cfg) {
-    if(auto pValue = props.tryGet("warningLevel")) {
-      clCompile.warningLevel = CppConfig.trWarningLevel(pValue.get!(const(int))());
+    if(auto pValue = src.tryGet!(Path[])("includePaths", fallbacks)) {
+      clCompile.includePaths = *pValue;
+      log.trace("Found includePaths: ", clCompile.includePaths);
     }
-    if(auto pValue = props.tryGet("pch")) {
+    else
+    {
+      log.trace("No includePaths property found.");
+    }
+    if(auto pValue = src.tryGet!bool("inheritIncludePaths", fallbacks)) {
+      clCompile.inheritIncludePaths = *pValue;
+    }
+    if(auto pValue = src.tryGet!int("warningLevel", fallbacks)) {
+      clCompile.warningLevel = CppConfig.trWarningLevel(*pValue);
+    }
+    if(auto pValue = src.tryGet!string("pch", fallbacks)) {
       assert(0, "Not implemented (handling of pch property)");
     }
-    if(auto pValue = props.tryGet("optimization")) {
-      clCompile.optimization = CppConfig.trOptimization(pValue.get!(const(int))());
+    if(auto pValue = src.tryGet!int("optimization", fallbacks)) {
+      clCompile.optimization = CppConfig.trOptimization(*pValue);
     }
-    if(auto pValue = props.tryGet("functionLevelLinking")) {
-      clCompile.functionLevelLinking = pValue.get!(const(bool))();
+    if(auto pValue = src.tryGet!bool("functionLevelLinking", fallbacks)) {
+      clCompile.functionLevelLinking = *pValue;
     }
-    if(auto pValue = props.tryGet("intrinsicFunctions")) {
-      clCompile.intrinsicFunctions = pValue.get!(const(bool))();
+    if(auto pValue = src.tryGet!bool("intrinsicFunctions", fallbacks)) {
+      clCompile.intrinsicFunctions = *pValue;
     }
-    if(auto pValue = props.tryGet("defines")) {
-      clCompile.defines = pValue.get!(const(string[]))().dup;
+    if(auto pValue = src.tryGet!(string[])("defines", fallbacks)) {
+      clCompile.defines = (*pValue).dup;
     }
-    if(auto pValue = props.tryGet("inheritDefines")) {
-      clCompile.inheritDefines = pValue.get!(const(bool))();
+    if(auto pValue = src.tryGet!bool("inheritDefines", fallbacks)) {
+      clCompile.inheritDefines = *pValue;
     }
   }
   return true;
@@ -504,12 +508,6 @@ bool setClCompileFrom(P...)(ref CppConfig cfg, in Properties src, in P fallbacks
 bool setLinkFrom(P...)(ref CppConfig cfg, in Properties src, in P fallbacks)
   if(allSatisfy!(isProperties, P))
 {
-  auto pLinkerProps = src.tryGet("linker", fallbacks);
-  if(pLinkerProps is null) {
-    log.warning(`Property "linker" not found.`);
-    return false;
-  }
-
   // TODO
 
   return true;
@@ -518,20 +516,20 @@ bool setLinkFrom(P...)(ref CppConfig cfg, in Properties src, in P fallbacks)
 bool setFilesFrom(P...)(ref CppConfig cfg, in Properties src, in P fallbacks)
   if(allSatisfy!(isProperties, P))
 {
-  auto pFiles = src.tryGet("sourceFiles", fallbacks);
+  auto pFiles = src.tryGet!(Path[])("sourceFiles", fallbacks);
   if(pFiles is null) {
     log.warning(`Property "sourceFiles" not found.`);
     return false;
   }
 
-  auto pMageFilePath = src.tryGet("mageFilePath", fallbacks);
+  auto pMageFilePath = src.tryGet!Path("mageFilePath", fallbacks);
   if(pMageFilePath is null) {
     log.warning(`Property "mageFilePath" not found.`);
     return false;
   }
 
-  auto filesRoot = pMageFilePath.get!(const(Path))().parent;
-  auto files = pFiles.get!(const(Path[]));
+  auto filesRoot = (*pMageFilePath).parent;
+  auto files = *pFiles;
   foreach(file; files.map!(a => cast()a))
   {
     auto _block = log.Block("Processing file: %s", file);
@@ -688,6 +686,8 @@ struct ClCompile
   string optimization;
   Option!bool functionLevelLinking;
   Option!bool intrinsicFunctions;
+  const(Path)[] includePaths;
+  bool inheritIncludePaths = true;
   string[] defines;
   bool inheritDefines = true;
 }
@@ -697,6 +697,13 @@ xml.Element* append(P)(ref P parent, in ClCompile cl)
 {
   auto n = parent.child("ClCompile");
   with(n) {
+    if(!cl.includePaths.empty) {
+      auto paths = cl.includePaths.map!(a => normalizedData(a.exists ? a.resolved() : a)).array;
+      if(cl.inheritIncludePaths) {
+        paths ~= "%(AdditionalIncludeDirectories)";
+      }
+      child("AdditionalIncludeDirectories").text("%-(%s;%)".format(paths));
+    }
     if(cl.pch) {
       child("PrecompiledHeader").text(cl.pch);
     }
@@ -712,11 +719,13 @@ xml.Element* append(P)(ref P parent, in ClCompile cl)
     if(cl.intrinsicFunctions) {
       child("IntrinsicFunctions").text(cl.intrinsicFunctions.unwrap().to!string());
     }
-    auto defs = cl.defines.dup;
-    if(cl.inheritDefines) {
-      defs ~= "%(PreprocessorDefinitions)";
+    if(!cl.defines.empty) {
+      auto defs = cl.defines.dup;
+      if(cl.inheritDefines) {
+        defs ~= "%(PreprocessorDefinitions)";
+      }
+      child("PreprocessorDefinitions").text("%-(%s;%)".format(defs));
     }
-    child("PreprocessorDefinitions").text("%-(%s;%)".format(defs));
   }
   return n;
 }

@@ -8,11 +8,12 @@ class Bar : StaticLibrary
 
   override void configure()
   {
-    this.name = "bar";
-    this.sourceFiles = [
+    properties.set!"name" = "bar";
+    properties.set!"sourceFiles" = [
       Path("bar.h"),
       Path("bar.cpp"),
     ];
+    properties.set!"linkTargets" = [ foo ];
 
     with(log.Block("Target Bar"))
     {

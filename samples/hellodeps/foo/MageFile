@@ -5,8 +5,8 @@ class Foo : StaticLibrary
 {
   override void configure()
   {
-    this.name = "foo";
-    this.sourceFiles = [
+    properties.set!"name" = "foo";
+    properties.set!"sourceFiles" = [
       Path("foo.h"),
       Path("foo.cpp"),
     ];

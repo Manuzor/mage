@@ -8,19 +8,28 @@ import std.algorithm : strip;
 debug = ShuffleTargets;
 debug = LogResolveDeps;
 
+struct MageConfig
+{
+  Path sourceRootPath;
+  GeneratorConfig[] genConfigs;
+}
+
 struct GeneratorConfig
 {
   string name;
 }
 
-auto readGeneratorConfigs(in Path p) {
-  GeneratorConfig[] cfgs;
-  foreach(line; p.open().byLine()) {
-    GeneratorConfig cfg;
-    cfg.name = cast(string)line.strip!(a => a.isWhite);
-    cfgs ~= cfg;
+auto readMageConfig(in Path p) {
+  MageConfig cfg;
+  auto lines = p.open().byLine;
+  cfg.sourceRootPath = Path(cast(string)lines.front);
+  lines.popFront();
+  foreach(line; lines) {
+    GeneratorConfig gen;
+    gen.name = cast(string)line.strip!(a => a.isWhite);
+    cfg.genConfigs ~= gen;
   }
-  return cfgs;
+  return cfg;
 }
 
 const(TypeInfo)[] targetOrder(ITargetWrapper[] targets)
@@ -74,8 +83,9 @@ int main(string[] args)
     auto _block = log.Block(`Creating target %s`, wrapper.targetName);
 
     auto target = wrapper.create();
-    target.mageFilePath = wrapper.filePath;
-    target.dependencies = wrapper.dependencies.map!(a => targets.find!(t => a == typeid(t))[0]).array;
+    target.properties.set!"name" = wrapper.targetName;
+    target.properties.set!"mageFilePath" = wrapper.filePath;
+    target.properties.set!"dependencies" = wrapper.dependencies.map!(a => targets.find!(t => a == typeid(t))[0]).array;
     log.info("Target deps: %s", wrapper.dependencies);
     targets ~= target;
   }
@@ -104,13 +114,15 @@ int main(string[] args)
   {
     foreach(target; targets)
     {
+      auto _chdir = ScopedChdir(target.properties.get!Path("mageFilePath").parent);
       target.configure();
     }
   }
 
   // Iterate all configured generators and pass all targets.`
-  auto cfgs = readGeneratorConfigs(cwd() ~ "gen.cfg");
-  foreach(cfg; cfgs) {
+  auto mageCfg = readMageConfig(cwd() ~ "mage.cfg");
+  globalProperties.set!"sourceRootPath" = mageCfg.sourceRootPath;
+  foreach(cfg; mageCfg.genConfigs) {
     log.info(`Generator "%s"`, cfg.name);
     
     auto path = Path(cfg.name);
@@ -118,6 +130,7 @@ int main(string[] args)
       path.mkdir(true);
     }
     with(ScopedChdir(path)) {
+      globalProperties.set!"genRootPath" = cwd();
       generatorRegistry[cfg.name].generate(targets);
     }
   }

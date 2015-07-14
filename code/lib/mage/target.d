@@ -21,14 +21,6 @@ abstract class Target
     return _properties;
   }
 
-  final @property void opDispatch(string key, T)(in T v) {
-    properties().opDispatch!(key)(v);
-  }
-
-  final @property ref inout(Variant) opDispatch(string key)() inout {
-    return properties().opDispatch!(key)();
-  }
-
   void configure() {}
 }
 
@@ -36,7 +28,7 @@ abstract class Target
 abstract class Executable : Target
 {
   this() {
-    properties.type = "executable";
+    properties.set!"type" = "executable";
   }
 }
 
@@ -50,8 +42,8 @@ enum LibraryType
 abstract class Library : Target
 {
   this(LibraryType libType) {
-    properties.type = "library";
-    properties.libType = libType;
+    properties.set!"type" = "library";
+    properties.set!"libType" = libType;
   }
 }
 

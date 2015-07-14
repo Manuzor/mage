@@ -1,7 +1,11 @@
 import mage;
 
-shared static this()
+class HelloDepsInit : Target
 {
-  globalProperties.name = "dependencies sample";
-  globalProperties.language = "cpp";
+  this()
+  {
+    globalProperties.set!"name" = "dependencies sample";
+    globalProperties.set!"language" = "cpp";
+    globalProperties.set!"includePaths" = [ cwd() ];
+  }
 }

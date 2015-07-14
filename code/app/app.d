@@ -151,8 +151,8 @@ int main(string[] args)
   data.files ~= Path("code") ~ "wand.d";
   data.files ~= transformed[];
   data.versions ~= "<dummy>";
-  auto genPath = Path("gen.cfg");
-  genPath.writeFile(""); // Clear the file.
+  auto genPath = Path("mage.cfg");
+  genPath.writeFile("%s\n".format(sourceDir.normalizedData)); // Clear the file.
   foreach(g; generators) {
     data.versions[$-1] = "MageGen_%s".format(g);
     data.outFile = Path("wand-%s".format(g));

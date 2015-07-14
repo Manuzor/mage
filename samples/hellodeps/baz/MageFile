@@ -4,13 +4,14 @@ import bar;
 
 class Baz : Executable
 {
-  @Dependency Bar barTarget;
+  @Dependency Bar bar;
 
   override void configure()
   {
-    this.name = "baz";
-    this.sourceFiles = [
+    properties.set!"name" = "baz";
+    properties.set!"sourceFiles" = [
       Path("baz.cpp")
     ];
+    properties.set!"linkTargets" = [ bar ];
   }
 }
