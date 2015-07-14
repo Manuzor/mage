@@ -65,10 +65,13 @@ package
   void doLog(string prefix, Args...)(string message, Args fmtargs)
   {
     printBlocks();
-    io.writef("%-*s", 2 * blocks.length + prefix.length, prefix);
+    io.write(indentString(prefix));
     io.writefln(message, fmtargs);
   }
 }
+
+@property int indentSize() { return blocks.length; }
+string indentString(string prefix = "") { return "%-*s".format(2 * indentSize + prefix.length, prefix); }
 
 void info   (Args...)(string fmt, Args fmtargs) { doLog!"Ifo| "(fmt, fmtargs); }
 void trace  (Args...)(string fmt, Args fmtargs) { doLog!"Trc| "(fmt, fmtargs); }
@@ -88,8 +91,4 @@ unittest
     info("Backing out again.");
   }
   info("Back to the top-level");
-}
-
-shared static this() {
-  // TODO Set some awesome default logger?
 }
