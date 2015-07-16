@@ -2,8 +2,8 @@
 #include <foo/foo.h>
 #include <cstdio>
 
-void printBar()
+void printBar(int level)
 {
-   printFoo();
-   std::printf("Yes, this is the bar!");
+   printFoo(level + 1);
+   std::printf("%*s%s\n", 2 * level, "", "Yes, this is the bar!");
 }

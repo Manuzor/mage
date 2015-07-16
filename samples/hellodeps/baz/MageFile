@@ -1,5 +1,6 @@
 module baz;
 import mage;
+import foo;
 import bar;
 
 class Baz : Executable
@@ -12,6 +13,9 @@ class Baz : Executable
     properties.set!"sourceFiles" = [
       Path("baz.cpp")
     ];
-    properties.set!"linkTargets" = [ bar ];
+    properties.addLinkTarget(bar);
+
+    // Tell the IDE that this is the target to run by default.
+    properties.set!"isStartup" = true;
   }
 }

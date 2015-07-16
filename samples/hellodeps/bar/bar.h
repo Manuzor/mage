@@ -1,3 +1,3 @@
 #pragma once
 
-void printBar();
+void printBar(int level);

@@ -58,6 +58,18 @@ abstract class SharedLibrary : Library
 }
 
 
+/// Helper to add link targets.
+void addLinkTarget(ref Properties props, Target target)
+{
+  Target[] targets;
+  if(auto pValue = props.tryGet!(Target[])("linkTargets")) {
+    targets = *pValue;
+  }
+  targets ~= target;
+  props.set!"linkTargets" = targets;
+}
+
+
 /// User-defined Attribute (UDA) to decorate a dependency field with.
 struct Dependency
 {

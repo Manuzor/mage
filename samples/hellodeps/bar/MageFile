@@ -13,7 +13,7 @@ class Bar : StaticLibrary
       Path("bar.h"),
       Path("bar.cpp"),
     ];
-    properties.set!"linkTargets" = [ foo ];
+    properties.addLinkTarget(foo);
 
     with(log.Block("Target Bar"))
     {

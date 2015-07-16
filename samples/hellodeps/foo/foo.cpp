@@ -2,7 +2,7 @@
 
 #include <cstdio>
 
-void printFoo()
+void printFoo(int level)
 {
-   std::printf("Well, foo!\n");
+   std::printf("%*s%s", 2 * level, "", "Well, foo!\n");
 }

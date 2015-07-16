@@ -30,7 +30,7 @@ class VS2013Generator : IGenerator
     assert(defaultLang, `[bug] Missing default property "language" (usually "none").`);
     targetProcessing: foreach(target; targets)
     {
-      auto _ = log.Block(`Processing target "%s"`.format(target.properties.tryGet!string("name")));
+      auto _ = log.Block(`Processing target "%s"`.format(target.properties.get!string("name")));
 
       auto targetType = target.properties.get!string("type", globalProperties, defaultProperties);
       log.trace(`Target type is "%s"`, targetType);
@@ -100,7 +100,8 @@ void generateSln(CppProject[] projects, in Path slnPath)
   stream.writeln(`Microsoft Visual Studio Solution File, Format Version 12.00`);
   stream.writeln(`# Visual Studio 2013`);
 
-  foreach(proj; projects) {
+  foreach_reverse(proj; projects.partition!( a => a.isStartup ))
+  {
     auto typeID = "{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}";
     auto projGuidString = "{%s}".format(proj.guid).toUpper();
     auto _projBlock = log.forcedBlock("Processing project %s %s", proj.name, projGuidString);
@@ -193,25 +194,31 @@ CppProject cppProject(Target target)
 {
   auto name = *target.properties.tryGet!string("name")
                                 .enforce("Target must have a name!");
-  auto cfgs = *target.properties.tryGet!(Properties[])("configurations", globalProperties, defaultProperties)
+  Properties localDefaults;
+  localDefaults.set!"outputDir" = Path("$(SolutionDir)$(Platform)$(Configuration)");
+
+  auto cfgs = *target.properties.tryGet!(Properties[])("configurations", globalProperties, localDefaults, defaultProperties)
                                 .enforce("No configurations found");
   auto proj = CppProject(name);
+  proj.isStartup = target.properties.has("isStartup");
+
   foreach(ref cfgProps; cfgs)
   {
     CppConfig cfg;
     cfg.setNameFrom(cfgProps, target.properties).enforce("A configuration needs a name!");
     log.info("Configuration: %s".format(cfg.name));
-    cfg.setArchitectureFrom(cfgProps, target.properties, globalProperties, defaultProperties).enforce("A configuration needs an architecture!");
+    cfg.setArchitectureFrom(cfgProps, target.properties, globalProperties, localDefaults, defaultProperties).enforce("A configuration needs an architecture!");
     log.info("Architecture: %s".format(cfg.architecture));
     cfg.setTypeFrom(target.properties);
-    cfg.setUseDebugLibsFrom(cfgProps, target.properties, globalProperties, defaultProperties);
+    cfg.setUseDebugLibsFrom(cfgProps, target.properties, globalProperties, localDefaults, defaultProperties);
     cfg.platformToolset = "v120";
     cfg.characterSet = "Unicode";
-    cfg.setWholeProgramOptimizationFrom(cfgProps, target.properties, globalProperties, defaultProperties);
-    cfg.setLinkIncrementalFrom(cfgProps, target.properties, globalProperties, defaultProperties);
-    cfg.setClCompileFrom(cfgProps, target.properties, globalProperties, defaultProperties);
-    cfg.setLinkFrom(cfgProps, target.properties, globalProperties, defaultProperties);
-    cfg.setFilesFrom(cfgProps, target.properties, target.properties, globalProperties, defaultProperties);
+    cfg.setWholeProgramOptimizationFrom(cfgProps, target.properties, globalProperties, localDefaults, defaultProperties);
+    cfg.setOutputFileFrom(proj, cfgProps, target.properties, globalProperties, localDefaults, defaultProperties);
+    cfg.setLinkIncrementalFrom(cfgProps, target.properties, globalProperties, localDefaults, defaultProperties);
+    cfg.setClCompileFrom(cfgProps, target.properties, globalProperties, localDefaults, defaultProperties);
+    cfg.setLinkFrom(cfgProps, target.properties, globalProperties, localDefaults, defaultProperties);
+    cfg.setFilesFrom(cfgProps, target.properties, target.properties, globalProperties, localDefaults, defaultProperties);
 
     proj.configs.length += 1;
     proj.configs[$-1] = cfg;
@@ -243,6 +250,9 @@ struct CppProject
   Path[] otherFiles;
   Target target;
 
+  /// Decides whether this project is the first to show up in the sln file.
+  bool isStartup = false;
+
   @disable this();
 
   this(string name)
@@ -257,6 +267,7 @@ struct CppConfig
   string name;
   string architecture;
   string type;
+  Path outputFile;
   Option!bool useDebugLibs;
   string platformToolset;
   string characterSet;
@@ -288,6 +299,22 @@ struct CppConfig
       log.warning("Unsupported warning level '%'".format(level));
     }
     return null;
+  }
+
+  static string trType2FileExt(string type)
+  {
+    try {
+      return [ "Application" : ".exe", "StaticLibrary" : ".lib" ][type];
+    }
+    catch(core.exception.RangeError) {
+      log.warning(`Unsupported config type "%s"`.format(type));
+    }
+    return null;
+  }
+
+  bool matches(in CppConfig other)
+  {
+    return this.name == other.name && this.architecture == other.architecture;
   }
 }
 
@@ -329,7 +356,7 @@ bool setArchitectureFrom(P...)(ref CppConfig cfg, in Properties src, in P fallba
 {
   auto pValue = src.tryGet!string("architecture", fallbacks);
   if(pValue is null) {
-    log.warning(`Property "architecture" not found.`);
+    log.trace(`Property "architecture" not found.`);
     return false;
   }
   cfg.architecture = CppConfig.trPlatform(*pValue);
@@ -440,16 +467,39 @@ bool setWholeProgramOptimizationFrom(P...)(ref CppConfig cfg, in Properties src,
 {
   auto pValue = src.tryGet!bool("wholeProgramOptimization", fallbacks);
   if(pValue is null) {
-    log.warning(`Property "wholeProgramOptimization" not found.`);
+    log.trace(`Property "wholeProgramOptimization" not found.`);
     return false;
   }
   if(cfg.useDebugLibs) {
-    log.warning(`When using debug libs, the option "wholeProgramOptimization" `
-                `cannot be set. Visual Studio itself forbids that. Ignoring the setting for now.`);
+    log.trace(`When using debug libs, the option "wholeProgramOptimization" ` ~
+              `cannot be set. Visual Studio itself forbids that. Ignoring the setting for now.`);
     return false;
   }
   cfg.wholeProgramOptimization = *pValue;
   return true;
+}
+
+bool setOutputFileFrom(P...)(ref CppConfig cfg, ref CppProject proj, in Properties src, in P fallbacks)
+  if(allSatisfy!(isProperties, P))
+{
+  const(Path)* pPath;
+  
+  pPath = src.tryGet!Path("outputFile", fallbacks);
+  if(pPath)
+  {
+    cfg.outputFile = *pPath;
+    return true;
+  }
+
+  pPath = src.tryGet!Path("outputDir", fallbacks);
+  if(pPath)
+  {
+    cfg.outputFile = *pPath ~ (proj.name ~ CppConfig.trType2FileExt(cfg.type));
+    return true;
+  }
+
+  log.warning(`Neither "outputFile" nor "outputDir" found.`);
+  return false;
 }
 
 bool setLinkIncrementalFrom(P...)(ref CppConfig cfg, in Properties src, in P fallbacks)
@@ -457,7 +507,7 @@ bool setLinkIncrementalFrom(P...)(ref CppConfig cfg, in Properties src, in P fal
 {
   auto pValue = src.tryGet!bool("linkIncremental", fallbacks);
   if(pValue is null) {
-    log.warning(`Property "linkIncremental" not found.`);
+    log.trace(`Property "linkIncremental" not found.`);
     return false;
   }
   // TODO Check which options are not compatible with the incremental linking option.
@@ -508,6 +558,28 @@ bool setClCompileFrom(P...)(ref CppConfig cfg, in Properties src, in P fallbacks
 bool setLinkFrom(P...)(ref CppConfig cfg, in Properties src, in P fallbacks)
   if(allSatisfy!(isProperties, P))
 {
+  if(auto pValue = src.tryGet!(Target[])("linkTargets", fallbacks))
+  {
+    foreach(t; *pValue)
+    {
+      auto otherProj = t.properties.tryGet!(CppProject*)("vs2013vcxproj");
+      if(otherProj is null)
+      {
+        log.warning(`Link target "%s" can not be added to linker dependencies at this time. You might have a cyclic dependency.`.format(typeid(t)));
+        continue;
+      }
+      foreach(otherCfg; (*otherProj).configs)
+      {
+        if(cfg.matches(otherCfg)) {
+          log.info("Adding linker dependency: %s", otherCfg.outputFile);
+          cfg.link.dependencies ~= otherCfg.link.dependencies[];
+          cfg.link.dependencies ~= otherCfg.outputFile.normalizedData;
+          break;
+        }
+      }
+    }
+  }
+
   // TODO
 
   return true;
@@ -630,6 +702,11 @@ xml.Element* append(P)(ref P parent, in CppProject proj)
         if(cfg.linkIncremental) {
           child("LinkIncremental").text(cfg.linkIncremental.unwrap().to!string());
         }
+        // Explicitly add a trailing slash to silence the MSBuild warning MSB8004.
+        child("OutDir").text(cfg.outputFile.parent.normalizedData ~ "/");
+        //child("IntDir").text("");
+        child("TargetName").text(cfg.outputFile.stem);
+        child("TargetExt").text(cfg.outputFile.extension);
       }
     }
     // Item definition groups
@@ -736,6 +813,8 @@ struct Link
   string genDebugInfo;
   string enableCOMDATFolding;
   string optimizeReferences;
+  string[] dependencies;
+  bool inheritDependencies = true;
 }
 
 xml.Element* append(P)(ref P parent, in Link lnk)
@@ -743,6 +822,14 @@ xml.Element* append(P)(ref P parent, in Link lnk)
 {
   auto n = parent.child("Link");
   with(n) {
+    auto deps = lnk.dependencies.dup;
+    if(lnk.inheritDependencies) {
+      deps ~= "%(AdditionalDependencies)";
+    }
+    if(!deps.empty) {
+      child("AdditionalDependencies").text("%-(%s;%)".format(deps));
+    }
+
     if(lnk.subSystem) {
       child("SubSystem").text(lnk.subSystem);
     }

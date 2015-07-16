@@ -5,9 +5,9 @@
 int main(int argc, char const *argv[])
 {
    std::printf("Printing foo...\n");
-   printFoo();
+   printFoo(1);
    std::printf("Printing bar...\n");
-   printBar();
+   printBar(1);
    std::printf("Done!\n");
    return 0;
 }
