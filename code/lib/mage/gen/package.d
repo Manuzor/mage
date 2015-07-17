@@ -22,7 +22,7 @@ mixin template RegisterGenerator(G, Name...)
   {
     auto g = new G();
     foreach(name; Name) {
-      registerGenerator(name, new G());
+      registerGenerator(name, g);
     }
   }
 }
