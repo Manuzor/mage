@@ -199,6 +199,7 @@ shared static this()
   cfgs.length = 2;
   cfgs[0].set!"name" = "Debug";
   cfgs[0].set!"architecture" = "x86";
+  cfgs[0].set!"debugSymbols" = true;
   cfgs[1].set!"name" = "Release";
   cfgs[1].set!"architecture" = "x86";
   defaultProperties.set!"configurations" = cfgs;

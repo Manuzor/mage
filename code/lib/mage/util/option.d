@@ -3,7 +3,7 @@ import mage;
 
 struct Option(T) {
   alias WrappedType = T;
-  alias WrapperType = VariantN!(T.sizeof, T, const(T), immutable(T));
+  alias WrapperType = VariantN!(T.sizeof, T);
 
   /// The underlying value wrapped in a `std.VariantN`.
   WrapperType value;
@@ -18,14 +18,15 @@ struct Option(T) {
   void clear() { value = WrapperType(); }
 
   /// Implicit conversion to bool. Equivalent to isSome().
-  bool opCast(T : bool)() const { return isSome(); }
+  bool opCast(CastTargetType : bool)() const { return isSome(); }
 
-  auto ref inout(T) unwrap() inout {
-    return *enforce(value.peek!(T)(), "This option has nothing to unwrap.");
+  /// Return the wrapped value. Throws an exception if there is no value.
+  auto ref inout(WrappedType) unwrap() inout {
+    return *value.peek!(WrappedType).enforce("This option has nothing to unwrap.");
   }
 
-  void opAssign(U : T)(auto ref U t) {
-    value = t;
+  void opAssign(U : WrappedType)(auto ref U t) {
+    value = cast(WrappedType)t;
   }
 }
 

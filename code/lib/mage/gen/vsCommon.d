@@ -605,6 +605,16 @@ bool setLinkFrom(P...)(ref CppConfig cfg, in VSGeneratorBase vsGen, in Propertie
     }
   }
 
+  if(auto pValue = src.tryGet!bool("debugSymbols", fallbacks)) {
+    cfg.link.debugSymbols = *pValue;
+  }
+
+  log.info("Looking for debugSymbolsFile property setting...");
+  if(auto pValue = src.tryGet!Path("debugSymbolsFile", fallbacks)) {
+    log.info("Found debugSymbolsFile property setting.");
+    cfg.link.debugSymbolsFile = *pValue;
+  }
+
   // TODO
 
   return true;
@@ -706,6 +716,8 @@ struct Link
   string optimizeReferences;
   string[] dependencies;
   bool inheritDependencies = true;
+  Option!bool debugSymbols;
+  Path debugSymbolsFile;
 }
 
 xml.Element* append(P)(ref P parent, in Link lnk)
@@ -732,6 +744,14 @@ xml.Element* append(P)(ref P parent, in Link lnk)
     }
     if(lnk.optimizeReferences) {
       child("OptimizeReferences").text(lnk.optimizeReferences);
+    }
+    log.info("Writing debugSymbols if available.");
+    log.info("Variant value: %s", lnk.debugSymbols.value);
+    if(lnk.debugSymbols) {
+      child("GenerateDebugInformation").text(lnk.debugSymbols.unwrap().to!string());
+      if(!lnk.debugSymbolsFile.isDot) {
+        child("ProgramDatabaseFile").text(lnk.debugSymbolsFile.normalizedData);
+      }
     }
   }
   return n;
