@@ -564,6 +564,14 @@ bool setClCompileFrom(P...)(ref CppConfig cfg, in Properties src, in P fallbacks
     if(auto pValue = src.tryGet!int("optimization", fallbacks)) {
       clCompile.optimization = CppConfig.trOptimization(*pValue);
     }
+    if(auto pValue = src.tryGet!string("language", fallbacks)) {
+      switch(*pValue)
+      {
+        case "c":   clCompile.compileAs = "C";   break;
+        case "cpp": clCompile.compileAs = "Cpp"; break;
+        default: assert(0, `Unsupported language: "%s"`.format(*pValue));
+      }
+    }
     if(auto pValue = src.tryGet!bool("functionLevelLinking", fallbacks)) {
       clCompile.functionLevelLinking = *pValue;
     }
@@ -662,6 +670,7 @@ struct ClCompile
   string warningLevel;
   string pch;
   string optimization;
+  string compileAs;
   Option!bool functionLevelLinking;
   Option!bool intrinsicFunctions;
   const(Path)[] includePaths;
@@ -690,6 +699,9 @@ xml.Element* append(P)(ref P parent, in ClCompile cl)
     }
     if(cl.optimization) {
       child("Optimization").text(cl.optimization);
+    }
+    if(cl.compileAs) {
+      child("CompileAs").text(cl.compileAs);
     }
     if(cl.functionLevelLinking)  {
       child("FunctionLevelLinking").text(cl.functionLevelLinking.unwrap().to!string());
