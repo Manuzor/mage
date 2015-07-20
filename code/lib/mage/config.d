@@ -23,6 +23,14 @@ struct Properties
     if(val) {
       return val.peek!T();
     }
+    else if(this.has(key))
+    {
+      log.warning(format(`Existing property "%s" is of type "%s", but was expected to be of type "%s".`,
+                         key,
+                         this._values[key].type,
+                         typeid(T)));
+      return null;
+    }
     foreach(ref other; fallbacks)
     {
       val = key in other._values;

@@ -18,7 +18,7 @@ class VSGeneratorBase : IGenerator
     supportedLanguages ~= "cpp";
   }
 
-  /// The name of the generator that is used to register it with mage.
+  /// The name of the generator that is used to register it with mage, e.g. "vs2013".
   @property abstract string name() const;
 
   /// For Visual Studio 2013, this would be "2013".
@@ -240,6 +240,7 @@ class VSGeneratorBase : IGenerator
       cfg.characterSet = "Unicode";
       cfg.setWholeProgramOptimizationFrom(cfgProps, target.properties, globalProperties, localDefaults, defaultProperties);
       cfg.setOutputFileFrom(proj, cfgProps, target.properties, globalProperties, localDefaults, defaultProperties);
+      cfg.setIntermediatesDirFrom(proj, cfgProps, target.properties, globalProperties, localDefaults, defaultProperties);
       cfg.setLinkIncrementalFrom(cfgProps, target.properties, globalProperties, localDefaults, defaultProperties);
       cfg.setClCompileFrom(cfgProps, target.properties, globalProperties, localDefaults, defaultProperties);
       cfg.setLinkFrom(this, cfgProps, target.properties, globalProperties, localDefaults, defaultProperties);
@@ -294,6 +295,7 @@ struct CppConfig
   string architecture;
   string type;
   Path outputFile;
+  Path intermediatesDir;
   Option!bool useDebugLibs;
   string platformToolset;
   string characterSet;
@@ -527,6 +529,21 @@ bool setOutputFileFrom(P...)(ref CppConfig cfg, ref CppProject proj, in Properti
   return false;
 }
 
+bool setIntermediatesDirFrom(P...)(ref CppConfig cfg, ref CppProject proj, in Properties src, in P fallbacks)
+  if(allSatisfy!(isProperties, P))
+{
+  if(auto pPath = src.tryGet!Path("intermediatesDir", fallbacks))
+  {
+    cfg.intermediatesDir = *pPath;
+    return true;
+  }
+  else if(src.has("intermediateDir", fallbacks)) {
+    log.warning(`Found property "intermediateDir". Did you mean "intermediatesDir" instead?`);
+  }
+
+  return false;
+}
+
 bool setLinkIncrementalFrom(P...)(ref CppConfig cfg, in Properties src, in P fallbacks)
   if(allSatisfy!(isProperties, P))
 {
@@ -543,8 +560,10 @@ bool setLinkIncrementalFrom(P...)(ref CppConfig cfg, in Properties src, in P fal
 bool setClCompileFrom(P...)(ref CppConfig cfg, in Properties src, in P fallbacks)
   if(allSatisfy!(isProperties, P))
 {
-  with(cfg) {
-    if(auto pValue = src.tryGet!(Path[])("includePaths", fallbacks)) {
+  with(cfg)
+  {
+    if(auto pValue = src.tryGet!(Path[])("includePaths", fallbacks))
+    {
       clCompile.includePaths = *pValue;
       log.trace("Found includePaths: ", clCompile.includePaths);
     }
@@ -564,7 +583,8 @@ bool setClCompileFrom(P...)(ref CppConfig cfg, in Properties src, in P fallbacks
     if(auto pValue = src.tryGet!int("optimization", fallbacks)) {
       clCompile.optimization = CppConfig.trOptimization(*pValue);
     }
-    if(auto pValue = src.tryGet!string("language", fallbacks)) {
+    if(auto pValue = src.tryGet!string("language", fallbacks))
+    {
       switch(*pValue)
       {
         case "c":   clCompile.compileAs = "C";   break;
@@ -851,7 +871,7 @@ xml.Element* append(P)(ref P parent, in CppProject proj)
         }
         // Explicitly add a trailing slash to silence the MSBuild warning MSB8004.
         child("OutDir").text(cfg.outputFile.parent.normalizedData ~ "/");
-        //child("IntDir").text("");
+        child("IntDir").text(cfg.intermediatesDir.normalizedData);
         child("TargetName").text(cfg.outputFile.stem);
         child("TargetExt").text(cfg.outputFile.extension);
       }
