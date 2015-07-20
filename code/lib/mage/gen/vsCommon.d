@@ -587,8 +587,8 @@ bool setClCompileFrom(P...)(ref CppConfig cfg, in Properties src, in P fallbacks
     {
       switch(*pValue)
       {
-        case "c":   clCompile.compileAs = "C";   break;
-        case "cpp": clCompile.compileAs = "Cpp"; break;
+        case "c":   clCompile.compileAs = "CompileAsC";   break;
+        case "cpp": clCompile.compileAs = "CompileAsCpp"; break;
         default: assert(0, `Unsupported language: "%s"`.format(*pValue));
       }
     }
@@ -871,7 +871,7 @@ xml.Element* append(P)(ref P parent, in CppProject proj)
         }
         // Explicitly add a trailing slash to silence the MSBuild warning MSB8004.
         child("OutDir").text(cfg.outputFile.parent.normalizedData ~ "/");
-        child("IntDir").text(cfg.intermediatesDir.normalizedData);
+        child("IntDir").text(cfg.intermediatesDir.normalizedData ~ "/");
         child("TargetName").text(cfg.outputFile.stem);
         child("TargetExt").text(cfg.outputFile.extension);
       }
