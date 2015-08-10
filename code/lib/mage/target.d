@@ -14,6 +14,8 @@ abstract class Target
 
   this()
   {
+    // Useful for targets that only do some global config.
+    properties.set!"type" = "none";
     // TODO Source file properties.
   }
 
@@ -22,6 +24,16 @@ abstract class Target
   }
 
   void configure() {}
+
+  override string toString() const
+  {
+    if(auto pValue = this.properties.tryGet!string("name"))
+    {
+      return *pValue;
+    }
+    import std.conv : to;
+    return typeid(this).to!string();
+  }
 }
 
 
@@ -41,9 +53,10 @@ enum LibraryType
 
 abstract class Library : Target
 {
-  this(LibraryType libType) {
-    properties.set!"type" = "library";
-    properties.set!"libType" = libType;
+  this(LibraryType libType)
+  {
+    this.properties.set!"type" = "library";
+    this.properties.set!"libType" = libType;
   }
 }
 
@@ -58,11 +71,16 @@ abstract class SharedLibrary : Library
 }
 
 
+/// Used for third-party inclusion.
+class ExternalTarget : Target {}
+
+
 /// Helper to add link targets.
 void addLinkTarget(ref Properties props, Target target)
 {
   Target[] targets;
-  if(auto pValue = props.tryGet!(Target[])("linkTargets")) {
+  if(auto pValue = props.tryGet!(Target[])("linkTargets"))
+  {
     targets = *pValue;
   }
   targets ~= target;

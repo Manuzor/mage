@@ -39,7 +39,8 @@ class VSGeneratorBase : IGenerator
 
     auto defaultLang = defaultProperties.tryGet!string("language");
     assert(defaultLang, `[bug] Missing default property "language" (usually "none").`);
-    targetProcessing: foreach(target; targets)
+  targetProcessing:
+    foreach(target; targets)
     {
       auto _ = log.Block(`Processing target "%s"`.format(target.properties.get!string("name")));
 
@@ -51,12 +52,18 @@ class VSGeneratorBase : IGenerator
       }
 
       auto langPtr = target.properties.tryGet!string("language", globalProperties, defaultProperties);
+      if(langPtr is null)
+      {
+        log.error(`The "language" property has to be set either as a global property, or on a per-Target basis.`);
+        assert(0);
+      }
       auto lang = *langPtr;
       if(langPtr is defaultLang) {
         log.warning(`No explicit "language" property set for target "%s". Falling back to global settings.`.format(target, lang));
       }
       log.info(`Language "%s"`.format(lang));
-      languageProcessing: foreach(supportedLang; supportedLanguages)
+    languageProcessing:
+      foreach(supportedLang; supportedLanguages)
       {
         if(lang != supportedLang) {
           continue languageProcessing;
@@ -80,8 +87,8 @@ class VSGeneratorBase : IGenerator
       assert(0, `Unsupported language: "%s"; Supported languages: [%-(%s, %)]`.format(lang, supportedLanguages));
     }
 
-    // Generate the vcxproj files
-    foreach(proj; projects) {
+    foreach(proj; projects)
+    {
       auto filePath = Path(proj.name) ~ "%s.vcxproj".format(proj.name);
       generateVcxproj(proj, filePath);
     }
@@ -92,12 +99,13 @@ class VSGeneratorBase : IGenerator
 
   void generateSln(CppProject[] projects, in Path slnPath)
   {
-    log.info("The original list of projects to generate the sln file from: %s", projects.map!(a => a.name));
+    auto _ = log.Block(`Generate .sln File "%s"`, slnPath);
+    log.trace("The original list of projects: %s", projects.map!(a => a.name));
 
     // Prioritize those that have the "isStartup" flag set.
     projects.partition!( a => a.isStartup );
 
-    log.info("The sorted list of projects to generate the sln file from: %s", projects.map!(a => a.name));
+    log.trace("The sorted list of projects: %s", projects.map!(a => a.name));
 
     // Collect all possible configurations.
     string[string] cfgs;
@@ -116,7 +124,9 @@ class VSGeneratorBase : IGenerator
     }
     auto stream = FileStream(slnPath);
     stream.indentString = "\t";
-    
+
+    auto __ = log.Block("Writing .sln File.");
+
     // Header
     stream.writeln(`Microsoft Visual Studio Solution File, Format Version %s0`.format(this.toolsVersion));
     stream.writeln(`# Visual Studio %s`.format(this.year));
@@ -141,9 +151,11 @@ class VSGeneratorBase : IGenerator
           stream.dedent();
           stream.writeln("EndProjectSection");
         }
-        auto deps = proj.target.properties.get!(Target[])("dependencies");
-        log.info("Deps: %s", deps.map!(a => "%s {%s}".format(a.properties.get!string("name"), a.properties.get!(CppProject*)("%s_vcxproj".format(this.name)).guid.toString().toUpper())));
-        auto projDeps = deps.map!(a => a.properties.get!(CppProject*)("%s_vcxproj".format(this.name)));
+        auto allDeps = proj.target.properties.get!(Target[])("dependencies");
+        auto deps = allDeps.filter!(a => typeid(a) is typeid(ExternalTarget));
+        auto vcxprojPropertyName = "%s_vcxproj".format(this.name);
+        auto projDeps = deps.map!(a => a.properties.get!(CppProject*)(vcxprojPropertyName));
+        log.info("Deps: %s", projDeps.map!(a => "%s {%s}".format(a.name, a.guid.toString().toUpper())));
         foreach(ref projDep; projDeps)
         {
           auto guidString = "{%s}".format(projDep.guid).toUpper();
@@ -256,6 +268,8 @@ class VSGeneratorBase : IGenerator
   {
     import mage.util.stream : FileStream;
 
+    auto _ = log.Block("Generate .vcxproj in %s", outFile);
+
     xml.Doc doc;
     doc.append(proj);
     log.info("Writing vcxproj file to: %s".format(outFile));
@@ -343,6 +357,40 @@ struct CppConfig
   {
     return this.name == other.name && this.architecture == other.architecture;
   }
+
+  bool matches(in Properties rhs)
+  {
+    if(auto pRhs = rhs.tryGet!string("name")) {
+      if(*pRhs != this.name) {
+        return false;
+      }
+    }
+    if(auto pRhs = rhs.tryGet!string("architecture")) {
+      if(*pRhs != this.architecture) {
+        return false;
+      }
+    }
+    return true;
+  }
+}
+
+bool configMatches(in Properties lhs, in Properties rhs)
+{
+  if(auto pLhs = lhs.tryGet!string("name")) {
+    if(auto pRhs = rhs.tryGet!string("name")) {
+      if(*pLhs != *pRhs) {
+        return false;
+      }
+    }
+  }
+  if(auto pLhs = lhs.tryGet!string("architecture")) {
+    if(auto pRhs = rhs.tryGet!string("architecture")) {
+      if(*pLhs != *pRhs) {
+        return false;
+      }
+    }
+  }
+  return true;
 }
 
 shared static this()
@@ -565,7 +613,7 @@ bool setClCompileFrom(P...)(ref CppConfig cfg, in Properties src, in P fallbacks
     if(auto pValue = src.tryGet!(Path[])("includePaths", fallbacks))
     {
       clCompile.includePaths = *pValue;
-      log.trace("Found includePaths: ", clCompile.includePaths);
+      log.trace(`Found "includePaths": %s`, clCompile.includePaths);
     }
     else
     {
@@ -611,10 +659,49 @@ bool setClCompileFrom(P...)(ref CppConfig cfg, in Properties src, in P fallbacks
 bool setLinkFrom(P...)(ref CppConfig cfg, in VSGeneratorBase vsGen, in Properties src, in P fallbacks)
   if(allSatisfy!(isProperties, P))
 {
+  // TODO Split this up somehow so it becomes more readable and understandable...
+
+  log.info("+++ +++ +++ +++ +++ +++ +++ +++");
+
+  log.info(`src: %s`, src);
+  log.info(`fallbacks: %s`, fallbacks[]);
+
   if(auto pValue = src.tryGet!(Target[])("linkTargets", fallbacks))
   {
+    // Here's the idea:
+    // 1. Check for the existance of linkTargets (above).
+    // 2. Iterate all targets and see whether their configurations match one of ours.
+    // 2.1.1 First, check for ExternalTarget types. These are pre-built binaries, specifying only a set of configurations and libs for them.
+    // 2.1.2 Set a linker dependency for the first matching configuration and continue with the loop.
+    // 2.2.1 Check for a vcxproj file property on the target. If it is a dependency of ours, this property is set and contains the outputFile.
+    // 2.2.2 Check for a matching config and use that outputFile as our dependency.
+
+    auto _ = log.Block("Processing Link Targets");
+
     foreach(t; *pValue)
     {
+      log.info("Target: %s", t.toString());
+      if(typeid(t) == typeid(ExternalTarget))
+      {
+        if(auto pConfigs = t.properties.tryGet!(Properties[])("configurations", fallbacks))
+        {
+          foreach(ref cfgProp; *pConfigs)
+          {
+            if(cfg.matches(cfgProp))
+            {
+              auto pLibPath = cfgProp.tryGet!Path("lib").enforce();
+              cfg.link.dependencies ~= (*pLibPath).normalizedData;
+              break;
+            }
+            log.info("Config doesn't match: %s", cfgProp._values);
+          }
+        }
+        else
+        {
+          log.info(`No "configurations" property found.`);
+        }
+        continue;
+      }
       auto otherProj = t.properties.tryGet!(CppProject*)("%s_vcxproj".format(vsGen.name));
       if(otherProj is null)
       {
@@ -667,10 +754,10 @@ bool setFilesFrom(P...)(ref CppConfig cfg, in Properties src, in P fallbacks)
   auto files = *pFiles;
   foreach(file; files.map!(a => cast()a))
   {
-    auto _block = log.Block("Processing file: %s", file);
+    auto _block = log.Block(`Processing file "%s"`, file);
     if(!file.isAbsolute) {
       file = filesRoot ~ file;
-      log.trace("Made path absolute: %s", file);
+      log.trace(`Made path absolute "%s"`, file);
     }
     if(file.extension == ".h") {
       cfg.headerFiles ~= file;
@@ -679,7 +766,7 @@ bool setFilesFrom(P...)(ref CppConfig cfg, in Properties src, in P fallbacks)
       cfg.cppFiles ~= file;
     }
     else {
-      log.warning("Unknown file type: %s", file.extension);
+      log.warning(`Unknown file type "%s"`, file.extension);
     }
   }
   return true;

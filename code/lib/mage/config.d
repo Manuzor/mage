@@ -139,6 +139,12 @@ struct Properties
     }
     return false;
   }
+
+  string opCast(CastTarget : string)() const
+  {
+    import std.conv : to;
+    return this._values.to!string();
+  }
 }
 
 ///
@@ -192,7 +198,8 @@ unittest
   }
 }
 
-enum isProperties(T) = is(T == Properties);
+import std.traits : Unqual;
+enum isProperties(T) = is(Unqual!T == Properties);
 
 
 // Globals
