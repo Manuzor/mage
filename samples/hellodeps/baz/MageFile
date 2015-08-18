@@ -9,13 +9,13 @@ class Baz : Executable
 
   override void configure()
   {
-    properties.set!"name" = "baz";
-    properties.set!"sourceFiles" = [
+    properties["name"] = "baz";
+    properties["sourceFiles"] = [
       Path("baz.cpp")
     ];
     properties.addLinkTarget(bar);
 
     // Tell the IDE that this is the target to run by default.
-    properties.set!"isStartup" = true;
+    properties["isStartup"] = true;
   }
 }

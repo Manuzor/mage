@@ -15,7 +15,7 @@ abstract class Target
   this()
   {
     // Useful for targets that only do some global config.
-    properties.set!"type" = "none";
+    properties["type"] = "none";
     // TODO Source file properties.
   }
 
@@ -27,9 +27,10 @@ abstract class Target
 
   override string toString() const
   {
-    if(auto pValue = this.properties.tryGet!string("name"))
+    auto var = this.properties["name"];
+    if(var.hasValue())
     {
-      return *pValue;
+      return (cast()var).get!string;
     }
     import std.conv : to;
     return typeid(this).to!string();
@@ -40,7 +41,7 @@ abstract class Target
 abstract class Executable : Target
 {
   this() {
-    properties.set!"type" = "executable";
+    properties["type"] = "executable";
   }
 }
 
@@ -55,8 +56,8 @@ abstract class Library : Target
 {
   this(LibraryType libType)
   {
-    this.properties.set!"type" = "library";
-    this.properties.set!"libType" = libType;
+    this.properties["type"] = "library";
+    this.properties["libType"] = libType;
   }
 }
 
@@ -79,12 +80,12 @@ class ExternalTarget : Target {}
 void addLinkTarget(ref Properties props, Target target)
 {
   Target[] targets;
-  if(auto pValue = props.tryGet!(Target[])("linkTargets"))
+  if(auto pValue = props.tryGet("linkTargets"))
   {
-    targets = *pValue;
+    targets = pValue.get!(Target[]);
   }
   targets ~= target;
-  props.set!"linkTargets" = targets;
+  props["linkTargets"] = targets;
 }
 
 

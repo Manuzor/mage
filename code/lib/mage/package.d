@@ -13,4 +13,5 @@ public import pathlib;
 public import log = mage.log;
 public import mage.gen;
 public import mage.target;
+public import mage.util.properties;
 public import mage.config;

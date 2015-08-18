@@ -1,245 +1,63 @@
 module mage.config;
 import mage;
-import std.variant;
+import mage.util.properties;
 
-mixin template CommonProperties()
+
+__gshared static auto G = Environment("GlobalEnv");
+
+
+private class GlobalEnvironment
 {
-  string name;
-  Path[] sourceFiles;
+  auto globals = Properties("globals");
+  auto defaults = Properties("globalDefaults");
 }
 
-struct Properties
-{
-  /// Dynamic property storage.
-  /// Note: This member is public on purpose.
-  Variant[string] _values;
+private __gshared static auto _G = new GlobalEnvironment();
 
-  /// Returns: Pointer to the argument value. May be null.
-  /// Note: This method makes use of std.VariantN.peek,
-  ///       i.e. the type T you pass must match the containing type exactly (=> short != int).
-  auto tryGet(T, Args...)(in string key, auto ref inout Args fallbacks) inout
-  {
-    auto val = key in _values;
-    if(val) {
-      return val.peek!T();
-    }
-    else if(this.has(key))
-    {
-      log.warning(format(`Existing property "%s" is of type "%s", but was expected to be of type "%s".`,
-                         key,
-                         this._values[key].type,
-                         typeid(T)));
-      return null;
-    }
-    foreach(ref other; fallbacks)
-    {
-      val = key in other._values;
-      if(val) {
-        return val.peek!T();
-      }
-    }
-    return null;
-  }
-
-  auto get(T, Args...)(in string key, auto ref Args fallbacks)
-  {
-    auto val = key in _values;
-    if(val) {
-      return val.get!T();
-    }
-    foreach(ref other; fallbacks)
-    {
-      val = key in other._values;
-      if(val) {
-        return val.get!T();
-      }
-    }
-    throw new Exception(`Key "%s" does not exist.`.format(key));
-  }
-
-  /// Creates an array of all occurences of $(D key) in this instance and all $(D others).
-  auto getAll(T, Args...)(in string key, auto ref Args others)
-  {
-    T[] result;
-
-    auto val = this.tryGet!T(key);
-    if(val) {
-      result ~= *val;
-    }
-
-    foreach(ref other; others)
-    {
-      val = other.tryGet!T(key);
-      if(val) {
-        result ~= *val;
-      }
-    }
-
-    return result;
-  }
-
-  void set(T)(in string key, T value)
-  {
-    _values[key] = value;
-  }
-
-  @property void set(string key, T)(T value)
-  {
-    this.set(key, value);
-  }
-
-  bool convertsTo(T, Args...)(in string key, auto ref in Args fallbacks) const
-  {
-    auto val = key in _values;
-    if(val && val.convertsTo!T()) {
-      return true;
-    }
-    foreach(ref other; fallbacks)
-    {
-      val = key in other._values;
-      if(val && val.convertsTo!T()) {
-        return true;
-      }
-    }
-    return false;
-  }
-
-  bool has(Args...)(in string key, auto ref in Args fallbacks) const
-  {
-    auto val = key in _values;
-    if(val && val.hasValue())
-    {
-      return true;
-    }
-    foreach(ref other; fallbacks)
-    {
-      val = key in other._values;
-      if(val && val.hasValue())
-      {
-        return true;
-      }
-    }
-    return false;
-  }
-
-  bool has(T, Args...)(in string key, auto ref in Args fallbacks) const
-  {
-    auto val = key in _values;
-    if(val && val.hasValue() && val.convertsTo!T())
-    {
-      return true;
-    }
-    foreach(ref other; fallbacks)
-    {
-      val = key in other._values;
-      if(val && val.hasValue() && val.convertsTo!T())
-      {
-        return true;
-      }
-    }
-    return false;
-  }
-
-  string opCast(CastTarget : string)() const
-  {
-    import std.conv : to;
-    return this._values.to!string();
-  }
-}
-
-///
-unittest
-{
-  import std.exception : assertThrown;
-
-  // set/get
-  {
-    Properties props;
-    props.set!"name" = "hello";
-    assert(props.get!string("name") == "hello");
-    props.set!"custom" = 1337;
-    assert(props.get!int("custom") == 1337);
-    props.set!"asdfghjkl" = 42;
-    assert(props.get!int("asdfghjkl") == 42);
-
-    assertThrown(props.get!int("iDontExist"));
-  }
-
-  // tryGet
-  {
-    Properties p1, p2, p3;
-
-    assert(p1.tryGet!int("needle") is null);
-    assert(p2.tryGet!int("needle") is null);
-    assert(p3.tryGet!int("needle") is null);
-    
-    p1.set!"needle" = 1;
-    p2.set!"needle" = 2;
-    p3.set!"needle" = 3;
-
-    // Beware: tryGet inly accepts the exact type that is stored.
-    assert(p1.tryGet!float("needle") is null);
-    assert(*p1.tryGet!int("needle", p2, p3) == 1);
-    assert(*p2.tryGet!int("needle", p1, p3) == 2);
-    assert(*p3.tryGet!int("needle", p1, p2) == 3);
-
-    p3.set!"blubb" = "abc";
-    assert(*p1.tryGet!string("blubb", p2, p3) == "abc");
-
-  }
-
-  // getAll
-  {
-    Properties p1, p2, p3, p4;
-    p1.set!"something" = "hello";
-    p2.set!"something" = " ";
-    p3.set!"something" = "world";
-    assert(p1.getAll!string("something", p2, p3, p4).equal(["hello", " ", "world"]));
-  }
-}
-
-import std.traits : Unqual;
-enum isProperties(T) = is(Unqual!T == Properties);
-
-
-// Globals
-
-__gshared Properties globalProperties;
-__gshared Properties defaultProperties;
 
 shared static this()
 {
-  // Default configurations if targets don't set any.
-  Properties[] cfgs;
-  cfgs.length = 2;
-  cfgs[0].set!"name" = "Debug";
-  cfgs[0].set!"architecture" = "x86";
-  cfgs[0].set!"debugSymbols" = true;
-  cfgs[1].set!"name" = "Release";
-  cfgs[1].set!"architecture" = "x86";
-  defaultProperties.set!"configurations" = cfgs;
-  defaultProperties.set!"language" = "none";
-  defaultProperties.set!"type" = "none";
+  _G.globals["sourceRootPath"] = Path();
+  _G.globals["genRootPath"] = Path();
+  G.env ~= &_G.globals;
 
-  globalProperties.set!"sourceRootPath" = Path();
-  globalProperties.set!"genRootPath" = Path();
+  // Default configurations if targets don't set any.
+  auto dbg = Properties("defaultConfig_Debug");
+  dbg["name"] = "Debug";
+  dbg["architecture"] = "x86";
+  dbg["debugSymbols"] = true;
+
+  auto rel = Properties("defaultConfig_Release");
+  rel["name"] = "Release";
+  rel["architecture"] = "x86";
+  
+  _G.defaults["configurations"] = [ dbg, rel ];
+  _G.defaults["language"] = "none";
+  _G.defaults["type"] = "none";
+  G.env ~= &_G.defaults;
 }
 
 unittest
 {
-  assert(defaultProperties.get!(Properties[])("configurations")[0].get!string("name") == "Debug");
-  assert(defaultProperties.get!(Properties[])("configurations")[0].get!string("architecture") == "x86");
-  assert(defaultProperties.get!(Properties[])("configurations")[1].get!string("name") == "Release");
-  assert(defaultProperties.get!(Properties[])("configurations")[1].get!string("architecture") == "x86");
-  assert(defaultProperties.get!string("language") == "none");
+  assert(G.first("configurations").get!(Properties[])[0].name == "defaultConfig_Debug");
+  assert(G.first("configurations").get!(Properties[])[0]["name"].get!string() == "Debug");
+  assert(G.first("configurations").get!(Properties[])[0]["architecture"].get!string() == "x86");
+  assert(G.first("configurations").get!(Properties[])[0]["debugSymbols"].get!bool() == true);
+
+  assert(G.first("configurations").get!(Properties[])[1].name == "defaultConfig_Release");
+  assert(G.first("configurations").get!(Properties[])[1]["name"].get!string() == "Release");
+  assert(G.first("configurations").get!(Properties[])[1]["architecture"].get!string() == "x86");
+
+  assert(G.first("language").get!string() == "none");
+  assert(G.first("type").get!string() == "none");
 }
 
 @property Path sourceRootPath()
 {
-  return globalProperties.get!Path("sourceRootPath");
+  return G.first("sourceRootPath").get!Path();
 }
 
 @property Path genRootPath()
 {
-  return globalProperties.get!Path("genRootPath");
+  return G.first("genRootPath").get!Path();
 }

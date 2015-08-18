@@ -84,13 +84,13 @@ bool isMatch(in Config self, in Config other)
 
 bool isMatch(in Config self, in Properties rhs)
 {
-  if(auto pRhs = rhs.tryGet!string("name")) {
-    if(*pRhs != self.name) {
+  if(auto varName = rhs.tryGet("name")) {
+    if(*varName != self.name) {
       return false;
     }
   }
-  if(auto pRhs = rhs.tryGet!string("architecture")) {
-    if(*pRhs != self.architecture) {
+  if(auto pArch = rhs.tryGet("architecture")) {
+    if(*pArch != self.architecture) {
       return false;
     }
   }
@@ -100,240 +100,223 @@ bool isMatch(in Config self, in Properties rhs)
 
 Project createProject(ref in VSInfo info, Target target)
 {
-  auto name = *target.properties.tryGet!string("name")
-                                .enforce("Target must have a name!");
+  string name;
+  {
+    auto varName = target.properties["name"];
+    if(!varName.hasValue()) {
+      log.error("Target must have a `name' property!");
+      assert(0);
+    }
+    name = varName.get!string();
+  }
   Properties localDefaults;
-  localDefaults.set!"outputDir" = Path("$(SolutionDir)$(Platform)$(Configuration)");
-  localDefaults.set!"characterSet" = "Unicode";
+  localDefaults["outputDir"] = Path("$(SolutionDir)$(Platform)$(Configuration)");
+  localDefaults["characterSet"] = "Unicode";
 
-  auto cfgs = *target.properties.tryGet!(Properties[])("configurations", globalProperties, localDefaults, defaultProperties)
-                                .enforce("No configurations found");
+  auto projEnv = Environment("%s_proj_env".format(name), target.properties, *G.env[0], localDefaults, *G.env[1]);
+
   auto proj = Project(name);
-  proj.isStartup = target.properties.has("isStartup");
+  proj.isStartup = (p){ return p && p.get!bool; }(target.properties.tryGet("isStartup"));
+  proj.target = target;
+  proj.toolsVersion = info.toolsVersion;
 
-  foreach(ref cfgProps; cfgs)
+  auto cfgs = projEnv.first("configurations")
+                     .enforce("No `configurations' found.");
+  foreach(ref Properties cfgProps; *cfgs)
   {
     proj.configs.length += 1;
     auto cfg = &proj.configs[$-1];
 
-    (*cfg).extractNameFrom(cfgProps, target.properties).enforce("A configuration needs a name!");
-    log.info("Configuration: %s".format(cfg.name));
-    (*cfg).extractArchitectureFrom(cfgProps, target.properties, globalProperties, localDefaults, defaultProperties).enforce("A configuration needs an architecture!");
-    log.info("Architecture: %s".format(cfg.architecture));
-    (*cfg).extractTypeFrom(target.properties);
-    (*cfg).extractUseDebugLibsFrom(cfgProps, target.properties, globalProperties, localDefaults, defaultProperties);
-    cfg.platformToolset = info.platformToolset;
-    if(auto pValue = target.properties.tryGet!string("platformToolset")) {
-      cfg.platformToolset = *pValue;
-    }
-    (*cfg).extractCharacterSetFrom(cfgProps, globalProperties, localDefaults, defaultProperties);
-    (*cfg).extractWholeProgramOptimizationFrom(cfgProps, target.properties, globalProperties, localDefaults, defaultProperties);
-    (*cfg).extractOutputFileFrom(proj, cfgProps, target.properties, globalProperties, localDefaults, defaultProperties);
-    (*cfg).extractIntermediatesDirFrom(proj, cfgProps, target.properties, globalProperties, localDefaults, defaultProperties);
-    (*cfg).extractLinkIncrementalFrom(cfgProps, target.properties, globalProperties, localDefaults, defaultProperties);
-    (*cfg).extractFilesFrom(cfgProps, target.properties, target.properties, globalProperties, localDefaults, defaultProperties);
+    auto env = Environment(projEnv.name ~ "_cfg", cfgProps, projEnv.env);
 
-    cfg.clCompile = createClCompile(cfgProps, target.properties, globalProperties, localDefaults, defaultProperties);
-    cfg.link = createLink(info, *cfg, cfgProps, target.properties, globalProperties, localDefaults, defaultProperties);
+    Properties fallback;
+    // TODO Fill `fallback'.
+    auto fallbackEnv = Environment(env.name ~ "_fallback", fallback);
+    fallbackEnv["characterSet"] = "Unicode";
+    fallbackEnv["wholeProgramOptimization"] = false;
+    fallbackEnv["intermediatesDir"] = Path("$(SolutionDir)temp/$(TargetName)_$(Platform)_$(Configuration)");
+    fallbackEnv["linkIncremental"] = false;
+    env.internal = &fallbackEnv;
+
+    cfg.name = env.configName();
+    log.info("Configuration: %s".format(cfg.name));
+
+    cfg.architecture = env.configArchitecture();
+    log.info("Architecture: %s".format(cfg.architecture));
+
+    cfg.type = env.configType();
+    cfg.useDebugLibs = env.configUseDebugLibgs(cfg.name);
+    cfg.platformToolset = env.configPlatformToolset(info);
+    cfg.characterSet = env.configCharacterSet();
+    cfg.wholeProgramOptimization = env.configWholeProgramOptimization();
+    cfg.outputFile = env.configOutputFile(proj, *cfg);
+    cfg.intermediatesDir = env.configIntermediatesDir();
+    cfg.linkIncremental = env.configLinkIncremental();
+    env.configFiles(cfg.headerFiles, cfg.cppFiles);
+
+    sanitize(*cfg);
+
+    cfg.clCompile = createClCompile(*cfg, env);
+    cfg.link = createLink(*cfg, info, env);
   }
+
   return proj;
 }
 
 
-bool extractFilesFrom(P...)(ref Config cfg, in Properties src, in P fallbacks)
-  if(allSatisfy!(isProperties, P))
+private auto required(ref Environment env, string propName)
 {
-  auto pFiles = src.tryGet!(Path[])("sourceFiles", fallbacks);
-  if(pFiles is null) {
-    log.warning(`Property "sourceFiles" not found.`);
-    return false;
-  }
-
-  auto pMageFilePath = src.tryGet!Path("mageFilePath", fallbacks);
-  if(pMageFilePath is null) {
-    log.warning(`Property "mageFilePath" not found.`);
-    return false;
-  }
-
-  auto filesRoot = (*pMageFilePath).parent;
-  auto files = *pFiles;
-  foreach(file; files.map!(a => cast()a))
-  {
-    auto _block = log.Block(`Processing file "%s"`, file);
-    if(!file.isAbsolute) {
-      file = filesRoot ~ file;
-      log.trace(`Made path absolute "%s"`, file);
-    }
-    if(file.extension == ".h") {
-      cfg.headerFiles ~= file;
-    }
-    else if(file.extension == ".cpp") {
-      cfg.cppFiles ~= file;
-    }
-    else {
-      log.warning(`Unknown file type "%s"`, file.extension);
-    }
-  }
-  return true;
+  return env.first(propName).enforce("Missing required property `%s'.".format(propName));
 }
 
-/// Set the config name from some properties.
-bool extractNameFrom(P...)(ref Config cfg, in Properties src, in P fallbacks)
-  if(allSatisfy!(isProperties, P))
+private auto optional(ref Environment env, string propName)
 {
-  auto pValue = src.tryGet!string("name", fallbacks);
-  if(pValue is null) {
-    log.warning(`Property "name" not found.`);
-    return false;
+  auto pVar = env.first(propName);
+  if(pVar is null || !pVar.hasValue()) {
+    log.trace("Missing optional property `%s'.", propName);
+    assert(env.internal, "Missing fallback environment.");
+    pVar = env.internal.first(propName);
+    assert(pVar, "Missing fallback value.");
   }
-  cfg.name = *pValue;
-  return true;
+  return pVar;
 }
 
-bool extractArchitectureFrom(P...)(ref Config cfg, in Properties src, in P fallbacks)
-  if(allSatisfy!(isProperties, P))
+
+string configName(ref Environment env)
 {
-  auto pValue = src.tryGet!string("architecture", fallbacks);
-  if(pValue is null) {
-    log.trace(`Property "architecture" not found.`);
-    return false;
-  }
-  cfg.architecture = trPlatform(*pValue);
-  return true;
+  return env.required("name")
+            .get!string;
 }
 
-bool extractTypeFrom(P...)(ref Config cfg, in Properties src, in P fallbacks)
-  if(allSatisfy!(isProperties, P))
+string configArchitecture(ref Environment env)
 {
-  auto pValue = src.tryGet!string("type", fallbacks);
-  if(pValue is null) {
-    log.warning(`Property "type" not found.`);
-    return false;
-  }
-  switch(*pValue) {
-    case "executable":
-      cfg.type = "Application";
-      break;
+  auto arch = env.required("architecture");
+  return trPlatform(arch.get!string);
+}
+
+string configType(ref Environment env)
+{
+  auto type = env.required("type")
+                 .get!string;
+  switch(type) {
+    case "executable": return "Application";
     case "library":
     {
-      auto libType = src.tryGet!LibraryType("libType", fallbacks)
-                        .enforce(`A "library" needs a "libType" property of type "mage.target.LibraryType".`);
-      final switch(*libType)
+      auto libType = env.required("libType")
+                        .get!LibraryType;
+      final switch(libType)
       {
-        case LibraryType.Static:
-          cfg.type = "StaticLibrary";
-          break;
-        case LibraryType.Shared: assert(0, "Not implemented (case LibraryType.Shared)");
+        case LibraryType.Static: return "StaticLibrary";
+        case LibraryType.Shared: assert(0, "Not implemented.");
       }
-      break;
     }
-    default: assert(0, "Not implemented (Config type)");
+    default: break;
   }
 
-  return true;
+  assert(0, "Unknown config type: %s".format(type));
 }
 
-void extractCharacterSetFrom(P...)(ref Config cfg, in Properties src, in P fallbacks)
+string configCharacterSet(ref Environment env)
 {
-  auto pValue = src.tryGet!string("characterSet", fallbacks);
-  if(pValue) {
-    // TODO Check for correct values.
-    cfg.characterSet = *pValue;
+  auto varCharset = env.optional("characterSet");
+  // TODO Check for correct values.
+  return varCharset.get!string;
+}
+
+bool configWholeProgramOptimization(ref Environment env)
+{
+  auto varValue = env.optional("wholeProgramOptimization");
+  return varValue.get!bool;
+}
+
+Path configOutputFile(ref Environment env, ref Project proj, ref cpp.Config cfg)
+{
+  auto pVar = env.first("outputFile");
+  if(pVar) {
+    return pVar.get!Path;
+  }
+
+  pVar = env.first("outputDir")
+            .enforce("Neither `outputFile' not `outputDir' was found, "
+                     "but need at least one of them.");
+  return pVar.get!Path ~ (proj.name ~ trType2FileExt(cfg.type));
+}
+
+Path configIntermediatesDir(ref Environment env)
+{
+  auto pVar = env.optional("intermediatesDir");
+  return pVar.get!Path;
+}
+
+bool configLinkIncremental(ref Environment env)
+{
+  auto pVar = env.optional("linkIncremental");
+  return pVar.get!bool;
+}
+
+/// Params:
+///   cfgName = If `env' does not contain the property "useDebugLibs",
+///             and this argument contains the string "debug" (ignoring the case),
+///             this function will yield $(D true).
+bool configUseDebugLibgs(ref Environment env, string cfgName)
+{
+  auto pVar = env.first("useDebugLibs");
+  if(pVar) {
+    return pVar.get!bool;
+  }
+
+  bool isRelease = cfgName.canFind!((a, b) => a.toLower() == b.toLower())("release");
+  return !isRelease;
+}
+
+string configPlatformToolset(ref Environment env, ref in VSInfo info)
+{
+  auto pVar = env.first("platformToolset");
+  if(pVar) {
+    return pVar.get!string;
+  }
+  return info.platformToolset;
+}
+
+void configFiles(ref Environment env, ref Path[] headerFiles, ref Path[] cppFiles)
+{
+  auto files = env.required("sourceFiles").get!(Path[]);
+  auto mageFilePath = env.required("mageFilePath").get!Path;
+  auto filesRoot = mageFilePath.parent;
+  foreach(ref file; files)
+  {
+    auto _block = log.Block(`Processing file "%s"`, file);
+    if(!file.isAbsolute)
+    {
+      file = filesRoot ~ file;
+      log.trace(`Mage path absolute "%s"`, file);
+    }
+
+    auto ext = file.extension;
+    if(ext == ".h" || ext == ".hpp")
+    {
+      headerFiles ~= file;
+    }
+    else if(ext == ".cpp" || ext == ".cxx")
+    {
+      cppFiles ~= file;
+    }
+    else
+    {
+      log.warning(`Unknown file extension: %s`, ext);
+    }
   }
 }
 
-bool extractWholeProgramOptimizationFrom(P...)(ref Config cfg, in Properties src, in P fallbacks)
-  if(allSatisfy!(isProperties, P))
+void sanitize(ref Config cfg)
 {
-  auto pValue = src.tryGet!bool("wholeProgramOptimization", fallbacks);
-  if(pValue is null) {
-    log.trace(`Property "wholeProgramOptimization" not found.`);
-    return false;
-  }
-  if(cfg.useDebugLibs) {
+  if(cfg.useDebugLibs && cfg.wholeProgramOptimization) {
     log.trace(`When using debug libs, the option "wholeProgramOptimization" ` ~
-              `cannot be set. Visual Studio itself forbids that. Ignoring the setting for now.`);
-    return false;
-  }
-  cfg.wholeProgramOptimization = *pValue;
-  return true;
-}
-
-bool extractOutputFileFrom(P...)(ref Config cfg, ref Project proj, in Properties src, in P fallbacks)
-  if(allSatisfy!(isProperties, P))
-{
-  const(Path)* pPath;
-  
-  pPath = src.tryGet!Path("outputFile", fallbacks);
-  if(pPath)
-  {
-    cfg.outputFile = *pPath;
-    return true;
+              `cannot be set. Visual Studio itself forbids that. Ignoring it for now.`);
+    cfg.wholeProgramOptimization = false;
   }
 
-  pPath = src.tryGet!Path("outputDir", fallbacks);
-  if(pPath)
-  {
-    cfg.outputFile = *pPath ~ (proj.name ~ trType2FileExt(cfg.type));
-    return true;
-  }
+  // TODO Check which options are not compatible with linkIncremental in visual studio.
 
-  log.warning(`Neither "outputFile" nor "outputDir" found.`);
-  return false;
-}
-
-bool extractIntermediatesDirFrom(P...)(ref Config cfg, ref Project proj, in Properties src, in P fallbacks)
-  if(allSatisfy!(isProperties, P))
-{
-  if(auto pPath = src.tryGet!Path("intermediatesDir", fallbacks))
-  {
-    cfg.intermediatesDir = *pPath;
-    return true;
-  }
-  else if(src.has("intermediateDir", fallbacks)) {
-    log.warning(`Found property "intermediateDir". Did you mean "intermediatesDir" instead?`);
-  }
-
-  return false;
-}
-
-bool extractLinkIncrementalFrom(P...)(ref Config cfg, in Properties src, in P fallbacks)
-  if(allSatisfy!(isProperties, P))
-{
-  auto pValue = src.tryGet!bool("linkIncremental", fallbacks);
-  if(pValue is null) {
-    log.trace(`Property "linkIncremental" not found.`);
-    return false;
-  }
-  // TODO Check which options are not compatible with the incremental linking option.
-  cfg.linkIncremental = *pValue;
-  return true;
-}
-
-/// Tries for the property "useDebugLibs". If it is not found,
-/// and the "name" property contains the string "release"
-/// (case insensitive), the debug libs will not be used.
-bool extractUseDebugLibsFrom(P...)(ref Config cfg, in Properties src, in P fallbacks)
-  if(allSatisfy!(isProperties, P))
-{
-  auto pValue = src.tryGet!bool("useDebugLibs", fallbacks);
-  if(pValue !is null) {
-    cfg.useDebugLibs = *pValue;
-    return true;
-  }
-  // If "use debug libs" was not explicitly given, try to see if the
-  // string "release" is contained in the name. If it is, we will
-  // not use the debug libs.
-  auto name = cfg.name;
-  if(name.empty) {
-    // Name not set on config yet. Let's see if we can find the name in the properties.
-    auto pName = src.tryGet!string("name");
-    if(pName is null) {
-      return false;
-    }
-    name = *pName;
-  }
-  bool isRelease = name.canFind!((a, b) => a.toLower() == b.toLower())("release");
-  cfg.useDebugLibs = !isRelease;
-  return true;
+  // TODO More.
 }

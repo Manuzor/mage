@@ -8,8 +8,8 @@ class Bar : StaticLibrary
 
   override void configure()
   {
-    properties.set!"name" = "bar";
-    properties.set!"sourceFiles" = [
+    properties["name"] = "bar";
+    properties["sourceFiles"] = [
       Path("bar.h"),
       Path("bar.cpp"),
     ];

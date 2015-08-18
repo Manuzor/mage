@@ -4,8 +4,8 @@ class HelloDepsInit : Target
 {
   this()
   {
-    globalProperties.set!"name" = "dependencies sample";
-    globalProperties.set!"language" = "cpp";
-    globalProperties.set!"includePaths" = [ cwd() ];
+    G["name"] = "dependencies sample";
+    G["language"] = "cpp";
+    G["includePaths"] = [ cwd() ];
   }
 }

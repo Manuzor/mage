@@ -7,9 +7,9 @@ import std.array;
 shared static this()
 {
   // Set the project's name.
-  globalProperties.set!"name" = "hello world";
+  G["name"] = "hello world";
   // This is a C++ project.
-  globalProperties.set!"language" = "cpp";
+  G["language"] = "cpp";
 }
 
 // Declare a target as a subclass of 'Target'. You can use
@@ -19,7 +19,7 @@ class Hello : Executable
 {
   this()
   {
-    properties.set!"name" = "hello";
-    properties.set!"sourceFiles" = [ Path("hello.cpp") ];
+    properties["name"] = "hello";
+    properties["sourceFiles"] = [ Path("hello.cpp") ];
   }
 }

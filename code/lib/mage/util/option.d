@@ -8,25 +8,29 @@ struct Option(T) {
   /// The underlying value wrapped in a `std.VariantN`.
   WrapperType value;
 
-  /// Whether this option has some value.
-  bool isSome() const { return value.hasValue(); }
-
-  /// Whether this option does not have some value.
-  bool isNone() const { return !isSome(); }
-
-  /// Clear the option so it no longer has a value.
-  void clear() { value = WrapperType(); }
-
-  /// Implicit conversion to bool. Equivalent to isSome().
-  bool opCast(CastTargetType : bool)() const { return isSome(); }
-
-  /// Return the wrapped value. Throws an exception if there is no value.
-  auto ref inout(WrappedType) unwrap() inout {
-    return *value.peek!(WrappedType).enforce("This option has nothing to unwrap.");
+  this(U)(auto ref U u) {
+    this.value = cast(WrappedType)u;
   }
 
-  void opAssign(U : WrappedType)(auto ref U t) {
-    value = cast(WrappedType)t;
+  /// Whether this option has some value.
+  bool isSome() inout { return this.value.hasValue(); }
+
+  /// Whether this option does not have some value.
+  bool isNone() inout { return !this.isSome(); }
+
+  /// Clear the option so it no longer has a value.
+  void clear() { this.value = WrapperType(); }
+
+  /// Implicit conversion to bool. Equivalent to isSome().
+  bool opCast(CastTargetType : bool)() inout { return this.isSome(); }
+
+  /// Return the wrapped value. Throws an exception if there is no value.
+  auto ref inout(WrappedType) unwrap(string msg = null) inout {
+    return *this.value.peek!(WrappedType).enforce(msg ? msg : "This option has nothing to unwrap.");
+  }
+
+  void opAssign(U : WrappedType)(auto ref U u) {
+    this.value = cast(WrappedType)u;
   }
 }
 

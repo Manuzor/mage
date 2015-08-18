@@ -21,51 +21,60 @@ struct ClCompile
   bool inheritDefines = true;
 }
 
-auto createClCompile(P...)(in Properties src, in P fallbacks)
-  if(allSatisfy!(isProperties, P))
+auto createClCompile(ref in cpp.Config cfg, ref Environment env)
 {
   ClCompile clCompile;
-  if(auto pValue = src.tryGet!(Path[])("includePaths", fallbacks))
+
+  if(auto var = env.first("includePaths"))
   {
-    clCompile.includePaths = *pValue;
+    clCompile.includePaths = var.get!(Path[]);
     log.trace(`Found "includePaths": %s`, clCompile.includePaths);
   }
   else
   {
-    log.trace("No includePaths property found.");
+    log.trace(`No "includePaths" property found.`);
   }
-  if(auto pValue = src.tryGet!bool("inheritIncludePaths", fallbacks)) {
-    clCompile.inheritIncludePaths = *pValue;
+
+  if(auto var = env.first("inheritIncludePaths")) {
+    clCompile.inheritIncludePaths = var.get!bool;
   }
-  if(auto pValue = src.tryGet!int("warningLevel", fallbacks)) {
-    clCompile.warningLevel = cpp.trWarningLevel(*pValue);
+
+  if(auto var = env.first("warningLevel")) {
+    clCompile.warningLevel = cpp.trWarningLevel(var.get!int);
   }
-  if(auto pValue = src.tryGet!string("pch", fallbacks)) {
-    assert(0, "Not implemented (handling of pch property)");
+
+  if(auto var = env.first("pch")) {
+    assert(0, `Not implemented (handling of "pch" property)`);
   }
-  if(auto pValue = src.tryGet!int("optimization", fallbacks)) {
-    clCompile.optimization = cpp.trOptimization(*pValue);
+
+  if(auto var = env.first("optimization")) {
+    clCompile.optimization = cpp.trOptimization(var.get!int);
   }
-  if(auto pValue = src.tryGet!string("language", fallbacks))
+
+  if(auto var = env.first("language"))
   {
-    switch(*pValue)
+    switch(var.get!string)
     {
       case "c":   clCompile.compileAs = "CompileAsC";   break;
       case "cpp": clCompile.compileAs = "CompileAsCpp"; break;
-      default: assert(0, `Unsupported language: "%s"`.format(*pValue));
+      default: assert(0, `Unsupported language: "%s"`.format(var.get!string));
     }
   }
-  if(auto pValue = src.tryGet!bool("functionLevelLinking", fallbacks)) {
-    clCompile.functionLevelLinking = *pValue;
+
+  if(auto var = env.first("functionLevelLinking")) {
+    clCompile.functionLevelLinking = var.get!bool;
   }
-  if(auto pValue = src.tryGet!bool("intrinsicFunctions", fallbacks)) {
-    clCompile.intrinsicFunctions = *pValue;
+
+  if(auto var = env.first("intrinsicFunctions")) {
+    clCompile.intrinsicFunctions = var.get!bool;
   }
-  if(auto pValue = src.tryGet!(string[])("defines", fallbacks)) {
-    clCompile.defines = (*pValue).dup;
+
+  if(auto var = env.first("defines")) {
+    clCompile.defines = var.get!(string[]).dup;
   }
-  if(auto pValue = src.tryGet!bool("inheritDefines", fallbacks)) {
-    clCompile.inheritDefines = *pValue;
+
+  if(auto var = env.first("inheritDefines")) {
+    clCompile.inheritDefines = var.get!bool;
   }
 
   return clCompile;

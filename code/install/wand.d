@@ -83,9 +83,9 @@ int main(string[] args)
     auto _block = log.Block(`Creating target %s`, wrapper.targetName);
 
     auto target = wrapper.create();
-    target.properties.set!"name" = wrapper.targetName;
-    target.properties.set!"mageFilePath" = wrapper.filePath;
-    target.properties.set!"dependencies" = wrapper.dependencies.map!(a => targets.find!(t => a == typeid(t))[0]).array;
+    target.properties["name"] = wrapper.targetName;
+    target.properties["mageFilePath"] = wrapper.filePath;
+    target.properties["dependencies"] = wrapper.dependencies.map!(a => targets.find!(t => a == typeid(t))[0]).array;
     log.info("Target deps: %s", wrapper.dependencies);
     targets ~= target;
   }
@@ -114,14 +114,14 @@ int main(string[] args)
   {
     foreach(target; targets)
     {
-      auto _chdir = ScopedChdir(target.properties.get!Path("mageFilePath").parent);
+      auto _chdir = ScopedChdir(target.properties["mageFilePath"].get!Path.parent);
       target.configure();
     }
   }
 
   // Iterate all configured generators and pass all targets.`
   auto mageCfg = readMageConfig(cwd() ~ "mage.cfg");
-  globalProperties.set!"sourceRootPath" = mageCfg.sourceRootPath;
+  G["sourceRootPath"] = mageCfg.sourceRootPath;
   foreach(cfg; mageCfg.genConfigs) {
     log.info(`Generator "%s"`, cfg.name);
     
@@ -130,7 +130,7 @@ int main(string[] args)
       path.mkdir(true);
     }
     with(ScopedChdir(path)) {
-      globalProperties.set!"genRootPath" = cwd();
+      G["genRootPath"] = cwd();
       generatorRegistry[cfg.name].generate(targets);
     }
   }

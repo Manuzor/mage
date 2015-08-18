@@ -21,8 +21,7 @@ struct Link
   Path debugSymbolsFile;
 }
 
-auto createLink(P...)(ref in VSInfo info, ref cpp.Config cfg, in Properties src, in P fallbacks)
-  if(allSatisfy!(isProperties, P))
+auto createLink(ref cpp.Config cfg, ref in VSInfo info, ref Environment env)
 {
   // TODO Split this up so it becomes more readable and understandable...
 
@@ -30,11 +29,12 @@ auto createLink(P...)(ref in VSInfo info, ref cpp.Config cfg, in Properties src,
 
   log.info("+++ +++ +++ +++ +++ +++ +++ +++");
 
-  log.info(`src: %s`, src);
-  log.info(`fallbacks: %s`, fallbacks[]);
+  log.info(`env: %s`, env);
 
-  if(auto pValue = src.tryGet!(Target[])("linkTargets", fallbacks))
+  if(auto var = env.first("linkTargets"))
   {
+    auto targets = var.get!(Target[]);
+
     // Here's the idea:
     // 1. Check for the existance of linkTargets (above).
     // 2. Iterate all targets and see whether their configurations match one of ours.
@@ -45,39 +45,41 @@ auto createLink(P...)(ref in VSInfo info, ref cpp.Config cfg, in Properties src,
 
     auto _ = log.Block("Processing Link Targets");
 
-    foreach(t; *pValue)
+    foreach(target; targets)
     {
-      log.info("Target: %s", t.toString());
-      if(typeid(t) == typeid(ExternalTarget))
+      log.info("Target: %s", target.toString());
+      if(typeid(target) == typeid(ExternalTarget))
       {
-        if(auto pConfigs = t.properties.tryGet!(Properties[])("configurations", fallbacks))
+        if(auto targetCfgs = env.first("configurations"))
         {
-          foreach(ref cfgProp; *pConfigs)
+          foreach(ref Properties cfgProp; *targetCfgs)
           {
             if(isMatch(cfg, cfgProp))
             {
-              auto pLibPath = cfgProp.tryGet!Path("lib").enforce();
-              link.dependencies ~= (*pLibPath).normalizedData;
+              auto libPath = cfgProp["lib"].get!Path;
+              link.dependencies ~= libPath.normalizedData;
               break;
             }
-            log.info("Config doesn't match: %s", cfgProp._values);
+            log.trace("Config doesn't match: %s", cfgProp.values);
           }
         }
         else
         {
-          log.info(`No "configurations" property found.`);
+          log.warning(`No "configurations" property found.`);
         }
         continue;
       }
-      auto otherProj = t.properties.tryGet!(cpp.Project*)("%s_vcxproj".format(info.genName));
+      auto otherProj = env.first("%s_vcxproj".format(info.genName));
       if(otherProj is null)
       {
-        log.warning(`Link target "%s" can not be added to linker dependencies at this time. You might have a cyclic dependency.`.format(typeid(t)));
+        log.warning(`Link target "%s" can not be added to linker dependencies at this time. `
+                    `You might have a cyclic dependency.`.format(typeid(target)));
         continue;
       }
-      foreach(otherCfg; (*otherProj).configs)
+      foreach(otherCfg; otherProj.get!(cpp.Project*).configs)
       {
-        if(isMatch(cfg, otherCfg)) {
+        if(isMatch(cfg, otherCfg))
+        {
           log.info("Adding linker dependency: %s", otherCfg.outputFile);
           link.dependencies ~= otherCfg.link.dependencies[];
           link.dependencies ~= otherCfg.outputFile.normalizedData;
@@ -87,14 +89,14 @@ auto createLink(P...)(ref in VSInfo info, ref cpp.Config cfg, in Properties src,
     }
   }
 
-  if(auto pValue = src.tryGet!bool("debugSymbols", fallbacks)) {
-    link.debugSymbols = *pValue;
+  if(auto var = env.first("debugSymbols")) {
+    link.debugSymbols = var.get!bool;
   }
 
-  log.info("Looking for debugSymbolsFile property setting...");
-  if(auto pValue = src.tryGet!Path("debugSymbolsFile", fallbacks)) {
-    log.info("Found debugSymbolsFile property setting.");
-    link.debugSymbolsFile = *pValue;
+  log.trace("Looking for debugSymbolsFile property setting...");
+  if(auto var = env.first("debugSymbolsFile")) {
+    log.trace("Found debugSymbolsFile property setting.");
+    link.debugSymbolsFile = var.get!Path;
   }
 
   // TODO
