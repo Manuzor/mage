@@ -103,20 +103,28 @@ Project createProject(ref in VSInfo info, Target target)
   string name;
   {
     auto varName = target.properties["name"];
-    if(!varName.hasValue()) {
+    if(!varName.hasValue())
+    {
       log.error("Target must have a `name' property!");
       assert(0);
     }
     name = varName.get!string();
   }
-  Properties localDefaults;
+
+  auto _= log.Block(`Create Cpp Project for "%s"`, name);
+
+  auto localDefaults = Properties("%s_defaults".format(name));
   localDefaults["outputDir"] = Path("$(SolutionDir)$(Platform)$(Configuration)");
   localDefaults["characterSet"] = "Unicode";
+
+  target.properties.prettyPrint();
 
   auto projEnv = Environment("%s_proj_env".format(name), target.properties, *G.env[0], localDefaults, *G.env[1]);
 
   auto proj = Project(name);
-  proj.isStartup = (p){ return p && p.get!bool; }(target.properties.tryGet("isStartup"));
+  if(auto var = target.properties.tryGet("isStartup")) {
+    proj.isStartup = var.get!bool;
+  }
   proj.target = target;
   proj.toolsVersion = info.toolsVersion;
 
@@ -130,7 +138,6 @@ Project createProject(ref in VSInfo info, Target target)
     auto env = Environment(projEnv.name ~ "_cfg", cfgProps, projEnv.env);
 
     Properties fallback;
-    // TODO Fill `fallback'.
     auto fallbackEnv = Environment(env.name ~ "_fallback", fallback);
     fallbackEnv["characterSet"] = "Unicode";
     fallbackEnv["wholeProgramOptimization"] = false;
@@ -140,6 +147,7 @@ Project createProject(ref in VSInfo info, Target target)
 
     cfg.name = env.configName();
     log.info("Configuration: %s".format(cfg.name));
+    fallback.name = "%s_fallback".format(cfg.name);
 
     cfg.architecture = env.configArchitecture();
     log.info("Architecture: %s".format(cfg.architecture));
@@ -289,7 +297,7 @@ void configFiles(ref Environment env, ref Path[] headerFiles, ref Path[] cppFile
     if(!file.isAbsolute)
     {
       file = filesRoot ~ file;
-      log.trace(`Mage path absolute "%s"`, file);
+      log.trace(`Made path absolute: %s`, file);
     }
 
     auto ext = file.extension;

@@ -60,7 +60,7 @@ void generateFile(ref in VSInfo info, cpp.Project[] projects, in Path slnPath)
         stream.writeln("EndProjectSection");
       }
       auto allDeps = proj.target.properties["dependencies"];
-      auto deps = allDeps.get!(Target[]).filter!(a => typeid(a) is typeid(ExternalTarget));
+      auto deps = allDeps.get!(Target[]).filter!(a => typeid(a) !is typeid(ExternalTarget));
       auto vcxprojPropertyName = "%s_vcxproj".format(info.genName);
       auto projDeps = deps.map!(a => a.properties[vcxprojPropertyName].get!(cpp.Project*));
       log.info("Deps: %s", projDeps.map!(a => "%s {%s}".format(a.name, a.guid.toString().toUpper())));

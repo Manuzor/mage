@@ -9,7 +9,7 @@ import core.exception : RangeError;
 
 struct Properties
 {
-  string name = "<none>";
+  string name = "<anonymous>";
 
   /// Dynamic property storage.
   /// Note: This member is public on purpose.
@@ -35,10 +35,18 @@ struct Properties
     this.values[key] = value;
   }
 
-  string opCast(CastTarget : string)() const
+  string toString() const
   {
-    import std.conv : to;
-    return "Properties(%s: %s)".format(this.name, this.values);
+    return "Properties(%s)".format(this.name);
+  }
+
+  void prettyPrint() const
+  {
+    auto _ = log.Block(this.toString());
+
+    foreach(key, ref value; this.values) {
+      log.info("%s: %s", key, (cast()value).toString());
+    }
   }
 }
 
@@ -138,6 +146,26 @@ struct Environment
     assert(this.env.length > 0, `Environment "%s" is empty!`.format(this.name));
     (*this.env[0])[key] = value;
   }
+
+  string toString() const
+  {
+    return "Environment(%s)".format(this.name);
+  }
+
+  void prettyPrint() const
+  {
+    auto _ = log.Block(this.toString());
+
+    foreach(p; this.env)
+    {
+      assert(p);
+      p.prettyPrint();
+    }
+
+    if(this.internal) {
+      this.internal.prettyPrint();
+    }
+  }
 }
 
 unittest
@@ -164,4 +192,12 @@ unittest
   assert(p2.tryGet("foo") is null);
   assert(p3.tryGet("foo") is null);
   assert(p4.tryGet("foo") is null);
+
+  p3["bar"] = null;
+  assert(env.first("bar") !is null);
+  assert(env["bar"].get!(typeof(null)) is null);
+  assert(p1.tryGet("bar") is null);
+  assert(p2.tryGet("bar") is null);
+  assert(p3.tryGet("bar") !is null);
+  assert(p4.tryGet("bar") is null);
 }

@@ -27,9 +27,9 @@ auto createLink(ref cpp.Config cfg, ref in VSInfo info, ref Environment env)
 
   auto link = Link();
 
-  log.info("+++ +++ +++ +++ +++ +++ +++ +++");
+  auto _link = log.forcedBlock("Link +++ +++ +++ +++ +++ +++ +++ +++");
 
-  log.info(`env: %s`, env);
+  env.prettyPrint();
 
   if(auto var = env.first("linkTargets"))
   {
@@ -69,7 +69,7 @@ auto createLink(ref cpp.Config cfg, ref in VSInfo info, ref Environment env)
         }
         continue;
       }
-      auto otherProj = env.first("%s_vcxproj".format(info.genName));
+      auto otherProj = target.properties.tryGet("%s_vcxproj".format(info.genName));
       if(otherProj is null)
       {
         log.warning(`Link target "%s" can not be added to linker dependencies at this time. `

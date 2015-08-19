@@ -62,6 +62,7 @@ class VSGeneratorBase : IGenerator
           continue languageProcessing;
         }
 
+        // Consolidate all "includePaths" in the target properties.
         Path[] allIncludePaths = targetEnv.all("includePaths").map!(a => a.get!(Path[])).joiner().array();
         log.info("Include paths: %(\n...| - %s%)", allIncludePaths);
         target.properties["includePaths"] = allIncludePaths;

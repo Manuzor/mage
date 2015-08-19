@@ -14,8 +14,9 @@ void generateFile(in cpp.Project proj, in Path outFile)
   auto _ = log.Block("Generate .vcxproj in %s", outFile);
 
   xml.Doc doc;
+  log.info("Generate vcxproj xml in memory...");
   doc.append(proj);
-  log.info("Writing vcxproj file to: %s".format(outFile));
+  log.info("Writing vcxproj file...");
   if(!outFile.parent.exists) {
     outFile.parent.mkdir();
   }
@@ -113,6 +114,7 @@ xml.Element* append(P)(ref P parent, in cpp.Project proj)
     }
     // Item definition groups
     foreach(cfg; proj.configs) {
+      log.trace("Writing config: %s", cfg.name);
       auto n = child("ItemDefinitionGroup");
       with(n) {
         attr("Condition", `'$(Configuration)|$(Platform)'=='%s|%s'`.format(cfg.name, cfg.architecture));
@@ -203,6 +205,7 @@ xml.Element* append(P)(ref P parent, ref in ClCompile cl)
 xml.Element* append(P)(ref P parent, in Link lnk)
   if(xml.isSomeParent!P)
 {
+  log.trace("Link (%s)", &lnk);
   auto n = parent.child("Link");
   with(n) {
     auto deps = lnk.dependencies.dup;
@@ -226,7 +229,7 @@ xml.Element* append(P)(ref P parent, in Link lnk)
       child("OptimizeReferences").text(lnk.optimizeReferences);
     }
     log.info("Writing debugSymbols if available.");
-    log.info("Variant value: %s", lnk.debugSymbols.value);
+    log.info("Variant value: %s", (cast()lnk.debugSymbols.value).toString());
     if(lnk.debugSymbols) {
       child("GenerateDebugInformation").text(lnk.debugSymbols.unwrap().to!string());
       if(!lnk.debugSymbolsFile.isDot) {

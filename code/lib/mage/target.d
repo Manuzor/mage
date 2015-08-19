@@ -14,6 +14,8 @@ abstract class Target
 
   this()
   {
+    properties.name = typeid(this).toString();
+
     // Useful for targets that only do some global config.
     properties["type"] = "none";
     // TODO Source file properties.
