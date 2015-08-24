@@ -81,7 +81,7 @@ abstract class SharedLibrary : Library
 
 
 /// Used for third-party inclusion.
-class ExternalTarget : Target
+abstract class ExternalTarget : Target
 {
   final override @property bool isExternal() const { return true; }
 }
@@ -90,6 +90,12 @@ class ExternalTarget : Target
 /// Helper to add link targets.
 void addLinkTarget(Target target, Target linkTarget)
 {
+  if(linkTarget.tryGet("libType") is null)
+  {
+    log.error("Missing `libType' property; Cannot add `%s' as link target.", linkTarget);
+    return;
+  }
+
   Target[] targets;
   if(auto pValue = target.tryGet("linkTargets"))
   {
