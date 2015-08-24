@@ -17,19 +17,17 @@ private __gshared static auto _G = new GlobalEnvironment();
 
 shared static this()
 {
+  import mage.target : Config;
+  
   _G.globals["sourceRootPath"] = Path();
   _G.globals["genRootPath"] = Path();
   G.env ~= &_G.globals;
 
   // Default configurations if targets don't set any.
-  auto dbg = Properties("defaultConfig_Debug");
-  dbg["name"] = "Debug";
-  dbg["architecture"] = "x86";
+  auto dbg = Config("Debug", "x86");
   dbg["debugSymbols"] = true;
 
-  auto rel = Properties("defaultConfig_Release");
-  rel["name"] = "Release";
-  rel["architecture"] = "x86";
+  auto rel = Config("Release", "x86");
   
   _G.defaults["configurations"] = [ dbg, rel ];
   _G.defaults["language"] = "none";
@@ -39,14 +37,16 @@ shared static this()
 
 unittest
 {
-  assert(G.first("configurations").get!(Properties[])[0].name == "defaultConfig_Debug");
-  assert(G.first("configurations").get!(Properties[])[0]["name"].get!string() == "Debug");
-  assert(G.first("configurations").get!(Properties[])[0]["architecture"].get!string() == "x86");
-  assert(G.first("configurations").get!(Properties[])[0]["debugSymbols"].get!bool() == true);
+  assert(G.first("configurations").get!(Config[])[0].name == "Debug");
+  assert(G.first("configurations").get!(Config[])[0].architecture == "x86");
+  assert(G.first("configurations").get!(Config[])[0]["name"].get!string() == "Debug");
+  assert(G.first("configurations").get!(Config[])[0]["architecture"].get!string() == "x86");
+  assert(G.first("configurations").get!(Config[])[0]["debugSymbols"].get!bool() == true);
 
-  assert(G.first("configurations").get!(Properties[])[1].name == "defaultConfig_Release");
-  assert(G.first("configurations").get!(Properties[])[1]["name"].get!string() == "Release");
-  assert(G.first("configurations").get!(Properties[])[1]["architecture"].get!string() == "x86");
+  assert(G.first("configurations").get!(Config[])[1].name == "Release");
+  assert(G.first("configurations").get!(Config[])[1].architecture == "x86");
+  assert(G.first("configurations").get!(Config[])[1]["name"].get!string() == "Release");
+  assert(G.first("configurations").get!(Config[])[1]["architecture"].get!string() == "x86");
 
   assert(G.first("language").get!string() == "none");
   assert(G.first("type").get!string() == "none");

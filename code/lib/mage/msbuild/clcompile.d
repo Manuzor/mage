@@ -21,7 +21,7 @@ struct ClCompile
   bool inheritDefines = true;
 }
 
-auto createClCompile(ref in cpp.Config cfg, ref Environment env)
+auto createClCompile(ref in cpp.MSBuildConfig cfg, ref Environment env)
 {
   ClCompile clCompile;
 

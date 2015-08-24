@@ -19,7 +19,7 @@ class Hello : Executable
 {
   this()
   {
-    properties["name"] = "hello";
-    properties["sourceFiles"] = [ Path("hello.cpp") ];
+    this["name"] = "hello";
+    this["sourceFiles"] = [ Path("hello.cpp") ];
   }
 }

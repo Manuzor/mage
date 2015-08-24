@@ -6,7 +6,7 @@ import mage;
 import mage.util.option;
 import mage.util.reflection;
 import mage.msbuild;
-import cpp = mage.msbuild.cpp;
+import mage.msbuild.cpp;
 import vcxproj = mage.msbuild.vcxproj;
 import sln = mage.msbuild.sln;
 
@@ -26,7 +26,7 @@ class VSGeneratorBase : IGenerator
 
   override void generate(Target[] targets)
   {
-    cpp.Project[] projects;
+    MSBuildProject[] projects;
     auto slnName = *G.first("name").enforce("Global property `name' must be set.");
     auto _generateBlock = log.Block(`Generating for project "%s"`, slnName);
 
@@ -63,10 +63,17 @@ class VSGeneratorBase : IGenerator
         }
 
         // Consolidate all "includePaths" in the target properties.
-        Path[] allIncludePaths = targetEnv.all("includePaths").map!(a => a.get!(Path[])).joiner().array();
+        auto allIncludePaths = targetEnv.all("includePaths").map!(a => a.get!(Path[])).joiner();
+        foreach(ref path; allIncludePaths)
+        {
+          if(!path.isAbsolute) {
+            auto mageFilePath = target.properties["mageFilePath"].get!Path;
+            path = mageFilePath.parent ~ path;
+          }
+        }
         log.info("Include paths: %(\n...| - %s%)", allIncludePaths);
-        target.properties["includePaths"] = allIncludePaths;
-        auto proj = cpp.createProject(info, target);
+        target.properties["includePaths"] = allIncludePaths.array();
+        auto proj = createProject(info, target);
         proj.toolsVersion = info.toolsVersion;
         if(auto pValue = target.properties.tryGet("toolsVersion")) {
           proj.toolsVersion = pValue.get!string;

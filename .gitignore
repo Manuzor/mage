@@ -4,4 +4,10 @@ __dummy.html
 *.o
 *.obj
 
-/output/
+output*/
+temp/
+
+# Visual Studio
+*.user
+*.sdf
+*.suo

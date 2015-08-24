@@ -2,10 +2,10 @@ module mage.msbuild.sln;
 
 import mage;
 import mage.msbuild : VSInfo;
-import cpp = mage.msbuild.cpp;
+import mage.msbuild.cpp;
 
 
-void generateFile(ref in VSInfo info, cpp.Project[] projects, in Path slnPath)
+void generateFile(ref in VSInfo info, MSBuildProject[] projects, in Path slnPath)
 {
   auto _ = log.Block(`Generate .sln File "%s"`, slnPath);
   log.trace("The original list of projects: %s", projects.map!(a => a.name));
@@ -60,9 +60,9 @@ void generateFile(ref in VSInfo info, cpp.Project[] projects, in Path slnPath)
         stream.writeln("EndProjectSection");
       }
       auto allDeps = proj.target.properties["dependencies"];
-      auto deps = allDeps.get!(Target[]).filter!(a => typeid(a) !is typeid(ExternalTarget));
+      auto nonExternalDeps = allDeps.get!(Target[]).filter!(a => !a.isExternal);
       auto vcxprojPropertyName = "%s_vcxproj".format(info.genName);
-      auto projDeps = deps.map!(a => a.properties[vcxprojPropertyName].get!(cpp.Project*));
+      auto projDeps = nonExternalDeps.map!(a => a.properties[vcxprojPropertyName].get!(MSBuildProject*));
       log.info("Deps: %s", projDeps.map!(a => "%s {%s}".format(a.name, a.guid.toString().toUpper())));
       foreach(ref projDep; projDeps)
       {

@@ -4,7 +4,14 @@ import mage;
 import mage.util.option;
 import std.variant;
 import std.typetuple : allSatisfy;
-import core.exception : RangeError;
+
+class MissingKeyError : core.exception.Error
+{
+  @safe pure nothrow this(string key, string file = __FILE__, size_t line = __LINE__, Throwable next = null)
+  {
+    super(`Missing key "` ~ key ~ `".`, file, line, next);
+  }
+}
 
 
 struct Properties
@@ -27,7 +34,11 @@ struct Properties
 
   ref inout(Variant) opIndex(in string key) inout
   {
-    return this.values[key];
+    auto val = this.tryGet(key);
+    if(val) {
+      return *val;
+    }
+    throw new MissingKeyError(key);
   }
 
   void opIndexAssign(T)(auto ref T value, string key)
@@ -66,7 +77,7 @@ unittest
   //struct IntValue { int value; }
   //assert(props["asdfghjkl"].coerce!IntValue().value == 42);
 
-  assertThrown!RangeError(props["iDontExist"].get!float());
+  assertThrown!MissingKeyError(props["iDontExist"].get!float());
   assert(props.tryGet("iDontExist", null) is null);
   {
     Variant fallback;
@@ -135,8 +146,8 @@ struct Environment
   ref inout(Variant) opIndex(in string key) inout
   {
     auto val = this.first(key);
-    enforce!RangeError(val, `Missing key "%s" in environment "%s".`
-                            .format(key, this.name));
+    enforce!MissingKeyError(val, `Missing key "%s" in environment "%s".`
+                                 .format(key, this.name));
     return *val;
   }
 
@@ -185,7 +196,7 @@ unittest
   assert(env.all("something").map!(a => a.get!string()).equal(["hello", " ", "world"]));
 
   assert(env.first("foo") is null);
-  assertThrown!RangeError(env["foo"] == 3.1415f);
+  assertThrown!MissingKeyError(env["foo"] == 3.1415f);
   env["foo"] = 3.1415f;
   assert(env["foo"].get!float == 3.1415f);
   assert(p1["foo"].get!float == 3.1415f);
@@ -200,4 +211,37 @@ unittest
   assert(p2.tryGet("bar") is null);
   assert(p3.tryGet("bar") !is null);
   assert(p4.tryGet("bar") is null);
+}
+
+mixin template PropertiesOperators(alias memberName)
+{
+  inout(Variant)* tryGet(string key) inout {
+    return memberName.tryGet(key);
+  }
+
+  void opIndexAssign(T)(auto ref T value, string key) {
+    memberName[key] = value;
+  }
+
+  ref inout(Variant) opIndex(string key) inout {
+    return memberName[key];
+  }
+}
+
+unittest
+{
+  static struct Wrapper
+  {
+    Properties props;
+    mixin PropertiesOperators!props;
+  }
+
+  Wrapper w;
+  w["foo"] = 123;
+  assert(w["foo"].get!int == 123);
+  assert(w["foo"] == 123);
+  assert(w.tryGet("bar") is null);
+  w["bar"] = "hello world";
+  assert(w.tryGet("bar") !is null);
+  assert(*w.tryGet("bar") == "hello world");
 }

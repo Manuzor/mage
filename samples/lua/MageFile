@@ -1,0 +1,54 @@
+module thirdparty.main;
+
+import mage;
+
+class Init : Target
+{
+  this()
+  {
+    G["name"] = "Lua sample";
+    G["language"] = "cpp";
+    G["includePaths"] = [ cwd() ];
+  }
+}
+
+class Main : Executable
+{
+  @Dependency Lua lua;
+
+  override void configure()
+  {
+    this["name"] = "main";
+    this["sourceFiles"] = [ Path("main.cpp") ];
+    this.addLinkTarget(lua);
+    this["includePaths"] = lua["includePaths"].get!(Path[]);
+  }
+}
+
+class Lua : ExternalTarget
+{
+  override void configure()
+  {
+    this["includePaths"] = [ Path("Lua/src") ];
+    //this["language"] = "c";
+
+    // Only x86 supported at this time.
+    this["architecture"] = "x86";
+    Config[] configs;
+    {
+      configs.length = 2;
+      // Debug config
+      configs[0].name = "Debug";
+      configs[0].architecture = "x86";
+      configs[0]["lib"] = Path("Lua/output/libluad.lib");
+
+
+      // Release config
+      configs[1].name = "Release";
+      configs[1].architecture = "x86";
+      configs[1]["lib"] = Path("Lua/output/liblua.lib");
+    }
+    
+    this["configurations"] = configs;
+  }
+}

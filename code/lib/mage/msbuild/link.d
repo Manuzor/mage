@@ -2,10 +2,10 @@ module mage.msbuild.link;
 
 import mage;
 import mage.msbuild : VSInfo;
-import mage.msbuild.cpp : isMatch;
-import cpp = mage.msbuild.cpp;
+import mage.msbuild.cpp;
 import mage.util.option;
 
+import std.range;
 import std.typetuple : allSatisfy;
 
 
@@ -21,7 +21,7 @@ struct Link
   Path debugSymbolsFile;
 }
 
-auto createLink(ref cpp.Config cfg, ref in VSInfo info, ref Environment env)
+auto createLink(ref MSBuildConfig cfg, ref in VSInfo info, ref Environment env)
 {
   // TODO Split this up so it becomes more readable and understandable...
 
@@ -33,11 +33,11 @@ auto createLink(ref cpp.Config cfg, ref in VSInfo info, ref Environment env)
 
   if(auto var = env.first("linkTargets"))
   {
-    auto targets = var.get!(Target[]);
+    auto linkTargets = var.get!(Target[]);
 
     // Here's the idea:
     // 1. Check for the existance of linkTargets (above).
-    // 2. Iterate all targets and see whether their configurations match one of ours.
+    // 2. Iterate all linkTargets and see whether their configurations match one of ours.
     // 2.1.1 First, check for ExternalTarget types. These are pre-built binaries, specifying only a set of configurations and libs for them.
     // 2.1.2 Set a linker dependency for the first matching configuration and continue with the loop.
     // 2.2.1 Check for a vcxproj file property on the target. If it is a dependency of ours, this property is set and contains the outputFile.
@@ -45,45 +45,58 @@ auto createLink(ref cpp.Config cfg, ref in VSInfo info, ref Environment env)
 
     auto _ = log.Block("Processing Link Targets");
 
-    foreach(target; targets)
+    foreach(ref linkTarget; linkTargets)
     {
-      log.info("Target: %s", target.toString());
-      if(typeid(target) == typeid(ExternalTarget))
-      {
-        if(auto targetCfgs = env.first("configurations"))
+      auto linkTargetName = linkTarget["name"].toString();
+      log.info("Target: %s", linkTargetName);
+
+      auto linkTargetEnv = Environment("%s_ltenv".format(linkTargetName), linkTarget.properties, G.env);
+      linkTargetEnv.prettyPrint();
+
+      auto configMatches = matchingConfigurations(env, linkTargetEnv).filter!(a => a[0].name == cfg.name);
+
+      if(configMatches.empty) {
+        log.error("No matching configurations found between `%s' and `%s'.", env["name"].toString(), linkTargetName);
+      }
+      else {
+        auto __ = log.Block("Matching configs");
+        foreach(ref match; configMatches)
         {
-          foreach(ref Properties cfgProp; *targetCfgs)
-          {
-            if(isMatch(cfg, cfgProp))
-            {
-              auto libPath = cfgProp["lib"].get!Path;
-              link.dependencies ~= libPath.normalizedData;
-              break;
-            }
-            log.trace("Config doesn't match: %s", cfgProp.values);
+          auto ___ = log.Block("Match");
+          match[0].properties.prettyPrint();
+          match[1].properties.prettyPrint();
+        }
+      }
+
+      if(linkTarget.isExternal)
+      {
+        foreach(ref match; configMatches)
+        {
+          log.trace(`External link dependency config: %s`, *match[1]);
+          auto libPath = (*match[1])["lib"].get!Path;
+          if(!libPath.isAbsolute) {
+            libPath = env["mageFilePath"].get!Path.parent ~ libPath;
           }
+          link.dependencies ~= libPath.normalizedData;
         }
-        else
+      }
+      else
+      {
+        auto pProj = linkTarget.tryGet("%s_vcxproj".format(info.genName));
+        if(pProj is null)
         {
-          log.warning(`No "configurations" property found.`);
+          log.warning(`Link target "%s" can not be added to linker dependencies at this time. `
+                      `You might have a cyclic dependency.`.format(linkTargetName));
+          continue;
         }
-        continue;
-      }
-      auto otherProj = target.properties.tryGet("%s_vcxproj".format(info.genName));
-      if(otherProj is null)
-      {
-        log.warning(`Link target "%s" can not be added to linker dependencies at this time. `
-                    `You might have a cyclic dependency.`.format(typeid(target)));
-        continue;
-      }
-      foreach(otherCfg; otherProj.get!(cpp.Project*).configs)
-      {
-        if(isMatch(cfg, otherCfg))
+
+        auto proj = pProj.get!(MSBuildProject*);
+        foreach(ref match; configMatches)
         {
-          log.info("Adding linker dependency: %s", otherCfg.outputFile);
-          link.dependencies ~= otherCfg.link.dependencies[];
-          link.dependencies ~= otherCfg.outputFile.normalizedData;
-          break;
+          // Find the matching msbuild project's config.
+          auto vcxprojConfig = proj.configs.find!(a => a.name == match[1].name);
+          link.dependencies ~= vcxprojConfig.front.link.dependencies[];
+          link.dependencies ~= vcxprojConfig.front.outputFile.normalizedData;
         }
       }
     }

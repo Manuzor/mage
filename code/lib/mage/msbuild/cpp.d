@@ -10,12 +10,12 @@ import std.typetuple : allSatisfy;
 import std.uuid;
 
 
-struct Project
+struct MSBuildProject
 {
   string name;
   UUID guid;
   string toolsVersion;
-  Config[] configs;
+  MSBuildConfig[] configs;
   Path[] headers;
   Path[] cpps;
   Path[] otherFiles;
@@ -33,7 +33,7 @@ struct Project
   }
 }
 
-struct Config
+struct MSBuildConfig
 {
   string name;
   string architecture;
@@ -77,28 +77,8 @@ string trType2FileExt(string type)
   return null;
 }
 
-bool isMatch(in Config self, in Config other)
-{
-  return other.name == self.name && other.architecture == self.architecture;
-}
 
-bool isMatch(in Config self, in Properties rhs)
-{
-  if(auto varName = rhs.tryGet("name")) {
-    if(*varName != self.name) {
-      return false;
-    }
-  }
-  if(auto pArch = rhs.tryGet("architecture")) {
-    if(*pArch != self.architecture) {
-      return false;
-    }
-  }
-  return true;
-}
-
-
-Project createProject(ref in VSInfo info, Target target)
+MSBuildProject createProject(ref in VSInfo info, Target target)
 {
   string name;
   {
@@ -111,7 +91,7 @@ Project createProject(ref in VSInfo info, Target target)
     name = varName.get!string();
   }
 
-  auto _= log.Block(`Create Cpp Project for "%s"`, name);
+  auto _= log.Block(`Create Cpp MSBuildProject for "%s"`, name);
 
   auto localDefaults = Properties("%s_defaults".format(name));
   localDefaults["outputDir"] = Path("$(SolutionDir)$(Platform)$(Configuration)");
@@ -121,7 +101,7 @@ Project createProject(ref in VSInfo info, Target target)
 
   auto projEnv = Environment("%s_proj_env".format(name), target.properties, *G.env[0], localDefaults, *G.env[1]);
 
-  auto proj = Project(name);
+  auto proj = MSBuildProject(name);
   if(auto var = target.properties.tryGet("isStartup")) {
     proj.isStartup = var.get!bool;
   }
@@ -130,12 +110,14 @@ Project createProject(ref in VSInfo info, Target target)
 
   auto cfgs = projEnv.first("configurations")
                      .enforce("No `configurations' found.");
-  foreach(ref Properties cfgProps; *cfgs)
+  foreach(ref Config cfg; *cfgs)
   {
     proj.configs.length += 1;
-    auto cfg = &proj.configs[$-1];
+    auto projCfg = &proj.configs[$-1];
 
-    auto env = Environment(projEnv.name ~ "_cfg", cfgProps, projEnv.env);
+    import std.traits;
+    pragma(msg, fullyQualifiedName!(typeof(cfg)));
+    auto env = Environment(projEnv.name ~ "_cfg", cfg.properties, projEnv.env);
 
     Properties fallback;
     auto fallbackEnv = Environment(env.name ~ "_fallback", fallback);
@@ -145,27 +127,27 @@ Project createProject(ref in VSInfo info, Target target)
     fallbackEnv["linkIncremental"] = false;
     env.internal = &fallbackEnv;
 
-    cfg.name = env.configName();
-    log.info("Configuration: %s".format(cfg.name));
-    fallback.name = "%s_fallback".format(cfg.name);
+    projCfg.name = env.configName();
+    log.info("Configuration: %s".format(projCfg.name));
+    fallback.name = "%s_fallback".format(projCfg.name);
 
-    cfg.architecture = env.configArchitecture();
-    log.info("Architecture: %s".format(cfg.architecture));
+    projCfg.architecture = env.configArchitecture();
+    log.info("Architecture: %s".format(projCfg.architecture));
 
-    cfg.type = env.configType();
-    cfg.useDebugLibs = env.configUseDebugLibgs(cfg.name);
-    cfg.platformToolset = env.configPlatformToolset(info);
-    cfg.characterSet = env.configCharacterSet();
-    cfg.wholeProgramOptimization = env.configWholeProgramOptimization();
-    cfg.outputFile = env.configOutputFile(proj, *cfg);
-    cfg.intermediatesDir = env.configIntermediatesDir();
-    cfg.linkIncremental = env.configLinkIncremental();
-    env.configFiles(cfg.headerFiles, cfg.cppFiles);
+    projCfg.type = env.configType();
+    projCfg.useDebugLibs = env.configUseDebugLibgs(projCfg.name);
+    projCfg.platformToolset = env.configPlatformToolset(info);
+    projCfg.characterSet = env.configCharacterSet();
+    projCfg.wholeProgramOptimization = env.configWholeProgramOptimization();
+    projCfg.outputFile = env.configOutputFile(proj, *projCfg);
+    projCfg.intermediatesDir = env.configIntermediatesDir();
+    projCfg.linkIncremental = env.configLinkIncremental();
+    env.configFiles(projCfg.headerFiles, projCfg.cppFiles);
 
-    sanitize(*cfg);
+    sanitize(*projCfg);
 
-    cfg.clCompile = createClCompile(*cfg, env);
-    cfg.link = createLink(*cfg, info, env);
+    projCfg.clCompile = createClCompile(*projCfg, env);
+    projCfg.link = createLink(*projCfg, info, env);
   }
 
   return proj;
@@ -237,7 +219,7 @@ bool configWholeProgramOptimization(ref Environment env)
   return varValue.get!bool;
 }
 
-Path configOutputFile(ref Environment env, ref Project proj, ref cpp.Config cfg)
+Path configOutputFile(ref Environment env, ref MSBuildProject proj, ref MSBuildConfig cfg)
 {
   auto pVar = env.first("outputFile");
   if(pVar) {
@@ -316,9 +298,12 @@ void configFiles(ref Environment env, ref Path[] headerFiles, ref Path[] cppFile
   }
 }
 
-void sanitize(ref Config cfg)
+void sanitize(ref MSBuildConfig cfg)
 {
-  if(cfg.useDebugLibs && cfg.wholeProgramOptimization) {
+  auto useDebugLibs = cfg.useDebugLibs && cfg.useDebugLibs.unwrap();
+  auto wholeProgramOptimization = cfg.wholeProgramOptimization && cfg.wholeProgramOptimization.unwrap();
+
+  if(useDebugLibs && wholeProgramOptimization) {
     log.trace(`When using debug libs, the option "wholeProgramOptimization" ` ~
               `cannot be set. Visual Studio itself forbids that. Ignoring it for now.`);
     cfg.wholeProgramOptimization = false;

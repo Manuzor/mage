@@ -3,11 +3,11 @@ module mage.msbuild.vcxproj;
 import mage;
 import mage.msbuild.clcompile;
 import mage.msbuild.link;
-import cpp = mage.msbuild.cpp;
+import mage.msbuild.cpp;
 import xml = mage.util.xml;
 
 
-void generateFile(in cpp.Project proj, in Path outFile)
+void generateFile(in MSBuildProject proj, in Path outFile)
 {
   import mage.util.stream : FileStream;
 
@@ -25,7 +25,7 @@ void generateFile(in cpp.Project proj, in Path outFile)
 }
 
 // XML
-xml.Element* append(P)(ref P parent, in cpp.Project proj)
+xml.Element* append(P)(ref P parent, in MSBuildProject proj)
   if(xml.isSomeParent!P)
 {
   auto c = parent.child("Project");
