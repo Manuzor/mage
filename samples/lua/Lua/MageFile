@@ -1,0 +1,68 @@
+import mage;
+import std.range;
+
+
+class Init : Target
+{
+  override void configure()
+  {
+    G["name"] = "Lua";
+    G["language"] = "c";
+    G["includePaths"] = [ cwd() ];
+
+    // Copy the default configs and make them x86_64.
+    Config[] configsx86_64;
+    foreach(ref Config cfg; G["configurations"])
+    {
+      configsx86_64 ~= cfg;
+      configsx86_64[$-1].architecture = "x86_64";
+    }
+    G["configurations"] = G["configurations"].get!(Config[]) ~ configsx86_64;
+
+
+    // Output dir pattern: `output<arch>/', e.g. outputx86, outputx86_64
+    // Use the "context" from the super class Target.
+    G["outputDir"] = () @system => Variant(Path("output%s/".format(context["architecture"].get!string)));
+  }
+}
+
+class LibLua : StaticLibrary
+{
+  override void configure()
+  {
+    this["name"] = "liblua";
+    auto sources = chain(Path("src").glob("*.h"),
+                         Path("src").glob("*.hpp"),
+                         Path("src").glob("*.c")
+                         )
+                   .filter!(a => a.name != "lua.c")  // Commandline interpreter.
+                   .filter!(a => a.name != "luac.c") // Standalone compiler.
+                   ;
+    this["sourceFiles"] = sources.array();
+  }
+}
+
+class Lua : Executable
+{
+  @Dependency LibLua liblua;
+
+  override void configure()
+  {
+    this["name"] = "lua";
+    this.addLinkTarget(this.liblua);
+    this["sourceFiles"] = [ Path("src") ~ "lua.c" ];
+    this["isStartup"] = true;
+  }
+}
+
+class LuaC : Executable
+{
+  @Dependency LibLua liblua;
+
+  override void configure()
+  {
+    this["name"] = "luac";
+    this.addLinkTarget(this.liblua);
+    this["sourceFiles"] = [ Path("src") ~ "luac.c" ];
+  }
+}

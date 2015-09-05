@@ -64,7 +64,7 @@ struct Element
 
 struct Doc
 {
-  Block!(4.KiB) mem;
+  BlockArray!(4.KiB) mem;
 
   string xmlVersion = "1.0";
   string xmlEncoding = "utf-8";

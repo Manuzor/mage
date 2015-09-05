@@ -2,8 +2,8 @@ module mage.config;
 import mage;
 import mage.util.properties;
 
-
 __gshared static auto G = Environment("GlobalEnv");
+static auto C = Environment("GlobalContext");
 
 
 private class GlobalEnvironment
@@ -13,6 +13,37 @@ private class GlobalEnvironment
 }
 
 private __gshared static auto _G = new GlobalEnvironment();
+
+class MagicContext
+{
+  Environment*[] envStack;
+
+  @property ref inout(Environment) activeEnv() inout
+  {
+    assert(!this.envStack.empty, "Magic context has no environment on the stack!");
+    return *envStack[$-1];
+  }
+
+  void setActive(ref Environment env)
+  {
+    this.envStack ~= &env;
+  }
+
+  void popActive()
+  {
+    if(!this.envStack.empty) {
+      this.envStack.length -= 1;
+    }
+  }
+
+  void opIndexAssign(T)(auto ref T value, string key) {
+    this.activeEnv[key] = value;
+  }
+
+  ref inout(Property) opIndex(string key) inout {
+    return *this.activeEnv.first(key);
+  }
+}
 
 
 shared static this()
@@ -54,10 +85,10 @@ unittest
 
 @property Path sourceRootPath()
 {
-  return G.first("sourceRootPath").get!Path();
+  return G["sourceRootPath"].get!Path();
 }
 
 @property Path genRootPath()
 {
-  return G.first("genRootPath").get!Path();
+  return G["genRootPath"].get!Path();
 }

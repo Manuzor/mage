@@ -2,8 +2,8 @@ module mage.util.properties;
 
 import mage;
 import mage.util.option;
-import std.variant;
 import std.typetuple : allSatisfy;
+import std.traits : isCallable, fullyQualifiedName;
 
 class MissingKeyError : core.exception.Error
 {
@@ -14,36 +14,121 @@ class MissingKeyError : core.exception.Error
 }
 
 
+/// Wraps std.variant.Variant
+struct Property
+{
+  static import std.variant;
+
+  alias Callable = Variant delegate();
+
+  std.variant.Variant value;
+
+  package bool isCallableValue = false;
+
+  this(T)(auto ref T value) { this.opAssign(value); }
+
+  void opAssign(T)(auto ref T value)
+  {
+    this.isCallableValue = isCallable!T;
+
+    static if(!isCallable!T)
+    {
+      this.value = value;
+    }
+    else
+    {
+      import std.functional : toDelegate, FunctionAttribute, functionAttributes;
+
+      alias DelType = typeof(toDelegate(value));
+      static assert(!(functionAttributes!DelType & FunctionAttribute.safe) && !(functionAttributes!DelType & FunctionAttribute.trusted),
+                    "@safe and @trusted functions are not supported due to some bug in phobos... Use @system instead for now.");
+      static assert(is(DelType == Callable),
+                    "Expected type `" ~ Callable.stringof ~ "', got `" ~ DelType.stringof ~ "'.");
+
+      this.value = toDelegate(value);
+    }
+  }
+
+  /// Shadows $(D std.variant.Variant.get).
+  auto get(T)() if(!is(T == const))
+  {
+    if(this.isCallableValue) {
+      return this.value.get!Callable()().get!T;
+    }
+
+    return this.value.get!T;
+  }
+
+  /// Shadows $(D std.variant.Variant.get).
+  auto get(T)() const if(is(T == const))
+  {
+    if(this.isCallableValue) {
+      return this.value.get!(const Callable)()().get!T;
+    }
+
+    return this.value.get!T;
+  }
+
+  alias value this;
+}
+
+///
+unittest
+{
+  Property p;
+  assert(!p.isCallableValue);
+  p = 42;
+  assert(!p.isCallableValue);
+  assert(p == 42);
+  assert(p.get!int == 42);
+
+  p = () @system => Variant(1337);
+  assert(p.isCallableValue);
+  assert(p.get!int() == 1337);
+
+  auto prop1 = Properties("first");
+  prop1["foo"] = "hello";
+
+  auto prop2 = Properties("second");
+  prop2["foo"] = () @system => Variant(prop1["foo"].get!string ~ " world!");
+
+  assert(prop2["foo"].isCallableValue);
+  assert(prop2["foo"].get!string() == "hello world!");
+  prop1["foo"] = "goodbye cruel";
+  assert(prop2["foo"].get!string() == "goodbye cruel world!");
+}
+
+
 struct Properties
 {
   string name = "<anonymous>";
 
   /// Dynamic property storage.
   /// Note: This member is public on purpose.
-  Variant[string] values;
+  Property[string] props;
 
-  inout(Variant)* tryGet(in string key, lazy Variant* otherwise = null) inout
-  {
-    auto val = key in this.values;
-    if(val) {
-      return val;
-    }
-
-    return cast(typeof(return))otherwise;
+  this(this) {
+    this.props = this.props.dup;
   }
 
-  ref inout(Variant) opIndex(in string key) inout
+  inout(Property)* tryGet(in string key, inout(Property)* otherwise = null) inout
   {
-    auto val = this.tryGet(key);
-    if(val) {
-      return *val;
+    auto prop = key in this.props;
+    return prop ? prop : otherwise;
+  }
+
+  ref inout(Property) opIndex(in string key) inout
+  {
+    auto prop = this.tryGet(key);
+    if(prop) {
+      return *prop;
     }
     throw new MissingKeyError(key);
   }
 
   void opIndexAssign(T)(auto ref T value, string key)
   {
-    this.values[key] = value;
+    this.props[key] = value;
   }
 
   string toString() const
@@ -55,7 +140,7 @@ struct Properties
   {
     auto _ = log.Block(this.toString());
 
-    foreach(key, ref value; this.values) {
+    foreach(key, ref value; this.props) {
       log.info("%s: %s", key, (cast()value).toString());
     }
   }
@@ -80,7 +165,7 @@ unittest
   assertThrown!MissingKeyError(props["iDontExist"].get!float());
   assert(props.tryGet("iDontExist", null) is null);
   {
-    Variant fallback;
+    Property fallback;
     assert(props.tryGet("iDontExist", &fallback) == &fallback);
   }
 
@@ -94,6 +179,7 @@ import std.traits : Unqual;
 enum isProperties(T) = is(Unqual!T == Properties);
 
 
+/// Linking Properties together linearly (as opposed to hierarchically).
 struct Environment
 {
   Properties*[] env;
@@ -122,28 +208,28 @@ struct Environment
   }
 
   /// Pointer to the first occurrence of `key' in this environment.
-  inout(Variant)* first(in string key, lazy Variant* otherwise = null) inout
+  inout(Property)* first(in string key, lazy Property* otherwise = null) inout
   {
     auto all = this.all(key);
     auto result = all.empty ? otherwise : all.front;
     return cast(typeof(return))result;
   }
 
-  /// Return: A range containing $(D Variant*).
+  /// Return: A range containing $(D Property*).
   auto all(in string key)
   {
-    return this.env.map!(a => a.tryGet(key, null)) // Properties* => Variant*
+    return this.env.map!(a => a.tryGet(key, null)) // Properties* => Property*
                    .filter!(a => a !is null);      // Allow no null values.
   }
 
-  /// Return: A range containing $(D Variant*).
+  /// Return: A range containing $(D Property*).
   auto all(in string key) const
   {
-    return this.env.map!(a => a.tryGet(key, null)) // Properties* => Variant*
+    return this.env.map!(a => a.tryGet(key, null)) // Properties* => Property*
                    .filter!(a => a !is null);      // Allow no null values.
   }
 
-  ref inout(Variant) opIndex(in string key) inout
+  ref inout(Property) opIndex(in string key) inout
   {
     auto val = this.first(key);
     enforce!MissingKeyError(val, `Missing key "%s" in environment "%s".`
@@ -151,7 +237,7 @@ struct Environment
     return *val;
   }
 
-  /// Set a value in env[0].
+  /// Set a value in this.env[0].
   void opIndexAssign(T)(auto ref T value, in string key)
   {
     assert(this.env.length > 0, `Environment "%s" is empty!`.format(this.name));
@@ -215,7 +301,7 @@ unittest
 
 mixin template PropertiesOperators(alias memberName)
 {
-  inout(Variant)* tryGet(string key) inout {
+  inout(Property)* tryGet(string key) inout {
     return memberName.tryGet(key);
   }
 
@@ -223,7 +309,7 @@ mixin template PropertiesOperators(alias memberName)
     memberName[key] = value;
   }
 
-  ref inout(Variant) opIndex(string key) inout {
+  ref inout(Property) opIndex(string key) inout {
     return memberName[key];
   }
 }

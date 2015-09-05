@@ -1,5 +1,3 @@
-module thirdparty.main;
-
 import mage;
 
 class Init : Target
@@ -8,7 +6,6 @@ class Init : Target
   {
     G["name"] = "Lua sample";
     G["language"] = "cpp";
-    G["includePaths"] = [ cwd() ];
   }
 }
 

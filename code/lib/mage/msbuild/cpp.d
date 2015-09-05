@@ -48,7 +48,7 @@ struct MSBuildConfig
   ClCompile clCompile;
   Link link;
   Path[] headerFiles;
-  Path[] cppFiles;
+  Path[] compilationUnits;
 }
 
 
@@ -78,11 +78,11 @@ string trType2FileExt(string type)
 }
 
 
-MSBuildProject createProject(ref in VSInfo info, Target target)
+MSBuildProject createProject(MagicContext context, ref in VSInfo info, Target target)
 {
   string name;
   {
-    auto varName = target.properties["name"];
+    auto varName = target["name"];
     if(!varName.hasValue())
     {
       log.error("Target must have a `name' property!");
@@ -100,9 +100,11 @@ MSBuildProject createProject(ref in VSInfo info, Target target)
   target.properties.prettyPrint();
 
   auto projEnv = Environment("%s_proj_env".format(name), target.properties, *G.env[0], localDefaults, *G.env[1]);
+  context.setActive(projEnv);
+  scope(exit) context.popActive();
 
   auto proj = MSBuildProject(name);
-  if(auto var = target.properties.tryGet("isStartup")) {
+  if(auto var = target.tryGet("isStartup")) {
     proj.isStartup = var.get!bool;
   }
   proj.target = target;
@@ -118,6 +120,8 @@ MSBuildProject createProject(ref in VSInfo info, Target target)
     import std.traits;
     pragma(msg, fullyQualifiedName!(typeof(cfg)));
     auto env = Environment(projEnv.name ~ "_cfg", cfg.properties, projEnv.env);
+    context.setActive(env);
+    scope(exit) context.popActive();
 
     Properties fallback;
     auto fallbackEnv = Environment(env.name ~ "_fallback", fallback);
@@ -142,7 +146,7 @@ MSBuildProject createProject(ref in VSInfo info, Target target)
     projCfg.outputFile = env.configOutputFile(proj, *projCfg);
     projCfg.intermediatesDir = env.configIntermediatesDir();
     projCfg.linkIncremental = env.configLinkIncremental();
-    env.configFiles(projCfg.headerFiles, projCfg.cppFiles);
+    env.configFiles(projCfg.headerFiles, projCfg.compilationUnits);
 
     sanitize(*projCfg);
 
@@ -221,21 +225,28 @@ bool configWholeProgramOptimization(ref Environment env)
 
 Path configOutputFile(ref Environment env, ref MSBuildProject proj, ref MSBuildConfig cfg)
 {
+  Path path;
+
   auto pVar = env.first("outputFile");
-  if(pVar) {
-    return pVar.get!Path;
+  if(pVar)
+  {
+    path = pVar.get!Path;
+  }
+  else
+  {
+    pVar = env.first("outputDir")
+              .enforce("Neither `outputFile' not `outputDir' was found, "
+                       "but need at least one of them.");
+    path = absolute(pVar.get!Path() ~ (proj.name ~ trType2FileExt(cfg.type)), env["mageFilePath"].get!Path.parent);
   }
 
-  pVar = env.first("outputDir")
-            .enforce("Neither `outputFile' not `outputDir' was found, "
-                     "but need at least one of them.");
-  return pVar.get!Path ~ (proj.name ~ trType2FileExt(cfg.type));
+  return path;
 }
 
 Path configIntermediatesDir(ref Environment env)
 {
   auto pVar = env.optional("intermediatesDir");
-  return pVar.get!Path;
+  return pVar.get!Path.absolute(env["mageFilePath"].get!Path.parent);
 }
 
 bool configLinkIncremental(ref Environment env)
@@ -268,7 +279,7 @@ string configPlatformToolset(ref Environment env, ref in VSInfo info)
   return info.platformToolset;
 }
 
-void configFiles(ref Environment env, ref Path[] headerFiles, ref Path[] cppFiles)
+void configFiles(ref Environment env, ref Path[] headerFiles, ref Path[] compilationUnits)
 {
   auto files = env.required("sourceFiles").get!(Path[]);
   auto mageFilePath = env.required("mageFilePath").get!Path;
@@ -276,20 +287,16 @@ void configFiles(ref Environment env, ref Path[] headerFiles, ref Path[] cppFile
   foreach(ref file; files)
   {
     auto _block = log.Block(`Processing file "%s"`, file);
-    if(!file.isAbsolute)
-    {
-      file = filesRoot ~ file;
-      log.trace(`Made path absolute: %s`, file);
-    }
+    file = file.absolute(filesRoot);
 
     auto ext = file.extension;
     if(ext == ".h" || ext == ".hpp")
     {
       headerFiles ~= file;
     }
-    else if(ext == ".cpp" || ext == ".cxx")
+    else if(ext == ".cpp" || ext == ".cxx" || ext == ".c")
     {
-      cppFiles ~= file;
+      compilationUnits ~= file;
     }
     else
     {

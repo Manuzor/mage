@@ -97,3 +97,25 @@ unittest {
   assert(ps.a == 1);
   assert(ps.b == 2);
 }
+
+/// Uses a dynamic array of fixed sized blocks to allocate memory.
+struct BlockArray(size_t N)
+{
+  Block!N[] blocks;
+}
+
+void[] allocate(size_t N)(ref BlockArray!N dyn, size_t size)
+{
+  import std.range;
+  
+  if(dyn.blocks.empty) {
+    ++dyn.blocks.length;
+  }
+  auto ptr = dyn.blocks[$-1].allocate(size);
+  if(ptr is null)
+  {
+    ++dyn.blocks.length;
+    ptr = dyn.blocks[$-1].allocate(size);
+  }
+  return ptr;
+}

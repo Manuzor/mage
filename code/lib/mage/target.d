@@ -12,7 +12,7 @@ public import std.typecons : Tuple;
 abstract class Target
 {
   Properties _properties;
-  const(Properties)* context;
+  MagicContext context;
 
   this()
   {

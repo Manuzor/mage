@@ -21,10 +21,11 @@ class VSGeneratorBase : IGenerator
 
   this()
   {
+    info.supportedLanguages ~= "c";
     info.supportedLanguages ~= "cpp";
   }
 
-  override void generate(Target[] targets)
+  override void generate(MagicContext context, Target[] targets)
   {
     MSBuildProject[] projects;
     auto slnName = *G.first("name").enforce("Global property `name' must be set.");
@@ -37,6 +38,8 @@ class VSGeneratorBase : IGenerator
       auto _ = log.Block(`Processing target "%s"`.format(targetName));
 
       auto targetEnv = Environment("%s_env".format(targetName), target.properties, G.env);
+      context.setActive(targetEnv);
+      scope(exit) context.popActive();
 
       auto targetType = targetEnv.first("type").get!string();
       log.trace(`Target type is "%s"`, targetType);
@@ -48,7 +51,7 @@ class VSGeneratorBase : IGenerator
       string lang;
       {
         auto varLang = targetEnv.first("language");
-        if(!varLang.hasValue()) {
+        if(!(*varLang).hasValue()) {
           log.error("The `language' property has to be set either as a global property, or on a per-Target basis.");
           assert(0);
         }
@@ -67,23 +70,23 @@ class VSGeneratorBase : IGenerator
         foreach(ref path; allIncludePaths)
         {
           if(!path.isAbsolute) {
-            auto mageFilePath = target.properties["mageFilePath"].get!Path;
+            auto mageFilePath = target["mageFilePath"].get!Path;
             path = mageFilePath.parent ~ path;
           }
         }
         log.info("Include paths: %(\n...| - %s%)", allIncludePaths);
-        target.properties["includePaths"] = allIncludePaths.array();
-        auto proj = createProject(info, target);
-        proj.toolsVersion = info.toolsVersion;
-        if(auto pValue = target.properties.tryGet("toolsVersion")) {
+        target["includePaths"] = allIncludePaths.array();
+        auto proj = createProject(context, this.info, target);
+        proj.toolsVersion = this.info.toolsVersion;
+        if(auto pValue = target.tryGet("toolsVersion")) {
           proj.toolsVersion = pValue.get!string;
         }
         projects ~= proj;
-        target.properties["%s_vcxproj".format(info.genName)] = &projects[$-1];
+        target["%s_vcxproj".format(this.info.genName)] = &projects[$-1];
         continue targetProcessing;
       }
 
-      assert(0, `Unsupported language: "%s"; Supported languages: [%-(%s, %)]`.format(lang, info.supportedLanguages));
+      assert(0, `Unsupported language: "%s"; Supported languages: [%-(%s, %)]`.format(lang, this.info.supportedLanguages));
     }
 
     foreach(proj; projects)
@@ -93,6 +96,6 @@ class VSGeneratorBase : IGenerator
     }
 
     // Generate .sln file
-    sln.generateFile(info, projects, Path("%s.sln".format(slnName)));
+    sln.generateFile(this.info, projects, Path("%s.sln".format(slnName)));
   }
 }

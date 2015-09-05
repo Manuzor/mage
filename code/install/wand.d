@@ -77,6 +77,7 @@ int main(string[] args)
 
   auto order = targetOrder(wrappedTargets);
 
+  auto context = new MagicContext();
   foreach(ti; order) {
     auto wrapper = wrappedTargets.find!(a => a.wrappedTypeInfo == ti)[0];
     auto _chdir = ScopedChdir(wrapper.filePath.parent);
@@ -87,6 +88,7 @@ int main(string[] args)
     target.properties["mageFilePath"] = wrapper.filePath;
     target.properties["dependencies"] = wrapper.dependencies.map!(a => targets.find!(t => a == typeid(t))[0]).array;
     log.info("Target deps: %s", wrapper.dependencies);
+    target.context = context;
     targets ~= target;
   }
 
@@ -98,15 +100,6 @@ int main(string[] args)
         auto dependentTarget = targets.find!(a => typeid(a) == dep)[0];
         wrapper.setDependencyInstance(target, dependentTarget);
       }
-    }
-  }
-
-  Properties context;
-  with(log.forcedBlock("Set Target Contexts"))
-  {
-    foreach(target; targets)
-    {
-      target.context = &context;
     }
   }
 
@@ -131,7 +124,7 @@ int main(string[] args)
     }
     with(ScopedChdir(path)) {
       G["genRootPath"] = cwd();
-      generatorRegistry[cfg.name].generate(targets);
+      generatorRegistry[cfg.name].generate(context, targets);
     }
   }
 

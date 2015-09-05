@@ -29,7 +29,8 @@ xml.Element* append(P)(ref P parent, in MSBuildProject proj)
   if(xml.isSomeParent!P)
 {
   auto c = parent.child("Project");
-  with(c) {
+  with(c)
+  {
     attr("DefaultTargets", "Build");
     attr("ToolsVersion", proj.toolsVersion);
     attr("xmlns", "http://schemas.microsoft.com/developer/msbuild/2003");
@@ -124,12 +125,12 @@ xml.Element* append(P)(ref P parent, in MSBuildProject proj)
     }
     foreach(cfg; proj.configs) {
 
-      if(cfg.cppFiles.length)
+      if(cfg.compilationUnits.length)
       {
         with(child("ItemGroup"))
         {
           attr("Condition", `'$(Configuration)|$(Platform)'=='%s|%s'`.format(cfg.name, cfg.architecture));
-          foreach(file; cfg.cppFiles) {
+          foreach(file; cfg.compilationUnits) {
             with(child("ClCompile")) {
               attr("Include", file.windowsData);
             }

@@ -4,10 +4,11 @@ module mage.gen;
 public import mage.gen.vs2013;
 
 import mage.target;
+import mage.config;
 
 interface IGenerator
 {
-  abstract void generate(Target[] target);
+  abstract void generate(MagicContext context, Target[] target);
 }
 
 IGenerator[string] generatorRegistry;

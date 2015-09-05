@@ -36,11 +36,10 @@ string[] makeCommand(in CompilationData data) {
     ~ data.libs.map!(a => a.normalizedData.to!string).array[]
     ~ format(`-I%-(%s;%)`, data.importPaths.map!(a => a.normalizedData.to!string))
     ~ data.versions.map!(a => format("-version=%s", a)).array
-    ~ data.flags[]
-  ;
+    ~ data.flags[];
 }
 
-void compile(in CompilationData data) {
+int compile(in CompilationData data) {
   import std.process : spawnProcess, wait;
 
   // Create a command from the compilation data
@@ -49,7 +48,7 @@ void compile(in CompilationData data) {
   log.info("Compiling: %s", cmd);
 
   // Invoke the full compilation command.
-  spawnProcess(cmd).wait();
+  return spawnProcess(cmd).wait();
 }
 
 enum string mageFileSuffix = q{
@@ -100,29 +99,41 @@ int main(string[] args)
     tempDir.mkdir(true);
   }
   else {
-    assert(tempDir.isDir, "Specified temp dir must be a directory! (does not have to exist yet)");
+    assert(tempDir.isDir, "Specified temp dir must not be an existing file!");
   }
 
-  if(helpInfo.helpWanted) {
+  if(helpInfo.helpWanted)
+  {
     defaultGetoptPrinter("Mage launcher.", helpInfo.options);
+    return 0;
+  }
+
+  if(args.length != 2)
+  {
+    defaultGetoptPrinter("Invalid number of arguments. Expected exactly 1 argument (source dir).", helpInfo.options);
     return 1;
   }
 
-  if(args.length != 2) {
-    defaultGetoptPrinter("Invalid number of arguments. Expected exactly 1 argument (source dir).", helpInfo.options);
-    return 2;
+  if(generators.empty)
+  {
+    log.error("Need at least one generator. (-G)");
+    return 128;
   }
 
   auto sourceDir = Path(args[1]);
-  if(!sourceDir.exists) {
+  if(!sourceDir.exists)
+  {
     log.error("Given source directory does not exist: %s".format(sourceDir));
+    return 128;
   }
+  sourceDir = sourceDir.resolved();
 
   auto mageFiles = sourceDir.glob("MageFile", SpanMode.breadth).array;
 
-  if(mageFiles.empty) {
+  if(mageFiles.empty)
+  {
     log.error("Unable to find any MageFile in: %s".format(sourceDir));
-    return 3;
+    return 128;
   }
 
   log.info("MageFiles: %(\n  %s%)", mageFiles);
@@ -130,7 +141,8 @@ int main(string[] args)
   string[string] manifest;
   auto outDir = tempDir ~ "src";
   Path[] transformed;
-  foreach(f; mageFiles) {
+  foreach(f; mageFiles)
+  {
     auto t = transformMageFile(sourceDir, f, outDir);
     manifest[t.to!string] = f.to!string;
     transformed ~= t;
@@ -139,6 +151,10 @@ int main(string[] args)
   dumpManifest(manifest, tempDir ~ "MageSourceManifest.json");
   log.info("Manifest: %s", manifest);
 
+  auto currentExeDir = currentExePath().parent;
+  auto libPath = currentExeDir ~ "lib";
+  auto codePath = currentExeDir ~ "code";
+
   CompilationData data;
   debug data.flags ~= "-debug";
   debug data.flags ~= "-gc";
@@ -146,19 +162,27 @@ int main(string[] args)
   version(X86)         data.flags ~= "-m32";
   else version(X86_64) data.flags ~= "-m64";
   else static assert(0, "Unsupported platform.");
-  data.libs ~= Path("lib").glob("*.lib").array;
-  data.importPaths ~= [cwd() ~ "import"];
-  data.files ~= Path("code") ~ "wand.d";
+  data.libs ~= libPath.glob("*.lib").array;
+  data.importPaths ~= [ currentExeDir ~ "import" ];
+  data.files ~= codePath ~ "wand.d";
   data.files ~= transformed[];
   data.versions ~= "<dummy>";
   auto genPath = Path("mage.cfg");
   genPath.writeFile("%s\n".format(sourceDir.normalizedData)); // Clear the file.
-  foreach(g; generators) {
+  int status = 0;
+  foreach(g; generators)
+  {
     data.versions[$-1] = "MageGen_%s".format(g);
     data.outFile = Path("wand-%s".format(g));
-    compile(data);
-    genPath.appendFile("%s\n".format(g));
+    if(compile(data) == 0) {
+      genPath.appendFile("%s\n".format(g));
+    }
+    else
+    {
+      log.error("Compilation failed.");
+      status = 2;
+    }
   }
 
-  return 0;
+  return status;
 }
