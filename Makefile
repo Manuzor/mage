@@ -59,14 +59,14 @@ dist: all
 	mkdir -p $(MAGEDIST_DESTDIR)/code
 
 # Binaries.
-	cp -r `find $(OUTDIR) -name '*.lib'` $(MAGEDIST_DESTDIR)/
-	cp -r `find $(OUTDIR) -name '*.exe'` $(MAGEDIST_DESTDIR)/
+	cp -ru `find $(OUTDIR) -maxdepth 1 -name '*.lib'` $(MAGEDIST_DESTDIR)/
+	cp -ru `find $(OUTDIR) -maxdepth 1 -name '*.exe'` $(MAGEDIST_DESTDIR)/
 
 # Code.
-	cp -r $(PATHLIB_CODEDIR)/. $(MAGEDIST_DESTDIR)/import
-	cp -r $(LIBMAGE_CODEDIR)/. $(MAGEDIST_DESTDIR)/import
-	cp -r $(MAGEAPP_CODEDIR)/. $(MAGEDIST_DESTDIR)/import
-	cp -r $(MAGEDIST_CODEDIR)/. $(MAGEDIST_DESTDIR)/code
+	cp -ru $(PATHLIB_CODEDIR)/. $(MAGEDIST_DESTDIR)/import
+	cp -ru $(LIBMAGE_CODEDIR)/. $(MAGEDIST_DESTDIR)/import
+	cp -ru $(MAGEAPP_CODEDIR)/. $(MAGEDIST_DESTDIR)/import
+	cp -ru $(MAGEDIST_CODEDIR)/. $(MAGEDIST_DESTDIR)/code
 
 
 lib: $(OUTDIR)/libmage.lib
