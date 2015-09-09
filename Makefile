@@ -5,7 +5,7 @@ DFLAGSCOMMON += -m64
 DFLAGSCOMMON += -gc
 DFLAGSCOMMON += -w
 
-MAGEDIST_TARGETDIR = $(OUTDIR)/dist
+MAGEDIST_DESTDIR = $(OUTDIR)/dist
 MAGEDIST_CODEDIR = code/install
 
 
@@ -54,19 +54,19 @@ runtests: tests
 	-$(OUTDIR)/libmagetests.exe
 
 dist: all
-	mkdir -p $(MAGEDIST_TARGETDIR)
-	mkdir -p $(MAGEDIST_TARGETDIR)/import
-	mkdir -p $(MAGEDIST_TARGETDIR)/code
+	mkdir -p $(MAGEDIST_DESTDIR)
+	mkdir -p $(MAGEDIST_DESTDIR)/import
+	mkdir -p $(MAGEDIST_DESTDIR)/code
 
 # Binaries.
-	cp -r `find $(OUTDIR) -name '*.lib'` $(MAGEDIST_TARGETDIR)/
-	cp -r `find $(OUTDIR) -name '*.exe'` $(MAGEDIST_TARGETDIR)/
+	cp -r `find $(OUTDIR) -name '*.lib'` $(MAGEDIST_DESTDIR)/
+	cp -r `find $(OUTDIR) -name '*.exe'` $(MAGEDIST_DESTDIR)/
 
 # Code.
-	cp -r $(PATHLIB_CODEDIR)/. $(MAGEDIST_TARGETDIR)/import
-	cp -r $(LIBMAGE_CODEDIR)/. $(MAGEDIST_TARGETDIR)/import
-	cp -r $(MAGEAPP_CODEDIR)/. $(MAGEDIST_TARGETDIR)/import
-	cp -r $(MAGEDIST_CODEDIR)/. $(MAGEDIST_TARGETDIR)/code
+	cp -r $(PATHLIB_CODEDIR)/. $(MAGEDIST_DESTDIR)/import
+	cp -r $(LIBMAGE_CODEDIR)/. $(MAGEDIST_DESTDIR)/import
+	cp -r $(MAGEAPP_CODEDIR)/. $(MAGEDIST_DESTDIR)/import
+	cp -r $(MAGEDIST_CODEDIR)/. $(MAGEDIST_DESTDIR)/code
 
 
 lib: $(OUTDIR)/libmage.lib
