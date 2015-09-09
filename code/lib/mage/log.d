@@ -7,7 +7,7 @@ import io = std.stdio;
 struct Block
 {
   string message;
-  int indentation;
+  size_t indentation;
   bool isPrinted = false;
 
   @disable this();
@@ -70,7 +70,7 @@ package
   }
 }
 
-@property int indentSize() { return blocks.length; }
+@property size_t indentSize() { return blocks.length; }
 string indentString(string prefix = "") { return "%-*s".format(2 * indentSize + prefix.length, prefix); }
 
 void info   (Args...)(string fmt, Args fmtargs) { doLog!"Ifo| "(fmt, fmtargs); }
