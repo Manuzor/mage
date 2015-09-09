@@ -10,6 +10,8 @@ Interesting targets:
 - tests -- Create testing executables in `output/`.
 - dist -- Assemble all files needed to install mage on any system, ready to be archived by `7z`, `tar`, or whatever. By default, all files are put to `output/dist/`. Use `make dist -e MAGEDIST_DESTDIR="C:/some/path/mage"` to control where these files are being put.
 
+You can use `make -e DFLAGS="-whatever"` to override the default flags passed to dmd for mage and all its dependencies.
+
 # Building with `dub`
 To build `libmage.lib`: `dub build mage:lib`
 To build `mage.exe`: `dub build mage:app` 
