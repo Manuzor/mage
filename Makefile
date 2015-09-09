@@ -1,9 +1,9 @@
 
 OUTDIR = output
 
-DFLAGSCOMMON += -m64
-DFLAGSCOMMON += -gc
-DFLAGSCOMMON += -w
+DFLAGS += -m64
+DFLAGS += -gc
+DFLAGS += -w
 
 MAGEDIST_DESTDIR = $(OUTDIR)/dist
 MAGEDIST_CODEDIR = code/install
@@ -12,7 +12,7 @@ MAGEDIST_CODEDIR = code/install
 PATHLIB_DIR = thirdParty/pathlib
 PATHLIB_CODEDIR = $(PATHLIB_DIR)/code
 PATHLIB_DFILES = $(shell find $(PATHLIB_CODEDIR) -name '*.d')
-PATHLIB_MAKE = +$(MAKE) -C $(PATHLIB_DIR) -e OUTDIR="../../$(OUTDIR)" -e DFLAGSCOMMON="$(DFLAGSCOMMON)"
+PATHLIB_MAKE = +$(MAKE) -C $(PATHLIB_DIR) -e OUTDIR="../../$(OUTDIR)" -e DFLAGS="$(DFLAGS)"
 
 LIBMAGE_CODEDIR = code/lib
 LIBMAGE_DFILES = $(shell find $(LIBMAGE_CODEDIR) -name '*.d')
@@ -71,38 +71,38 @@ dist: all
 
 lib: $(OUTDIR)/libmage.lib
 $(OUTDIR)/libmage.lib: $(LIBMAGE_DFILES) | pathlib
-	$(eval DFLAGS = $(DFLAGSCOMMON))
+	$(eval LIBMAGE_DFLAGS = $(DFLAGS))
 
-	$(eval DFLAGS += -I$(PATHLIB_CODEDIR))
-	$(eval DFLAGS += -L$(OUTDIR)/pathlib.lib)
+	$(eval LIBMAGE_DFLAGS += -I$(PATHLIB_CODEDIR))
+	$(eval LIBMAGE_DFLAGS += -L$(OUTDIR)/pathlib.lib)
 
-	$(eval DFLAGS += -lib)
-	dmd $(LIBMAGE_DFILES) $(DFLAGS) -of$(OUTDIR)/libmage.lib
+	$(eval LIBMAGE_DFLAGS += -lib)
+	dmd $(LIBMAGE_DFILES) $(LIBMAGE_DFLAGS) -of$(OUTDIR)/libmage.lib
 
 libtests: $(OUTDIR)/libmagetests.exe
 $(OUTDIR)/libmagetests.exe: $(LIBMAGE_DFILES) | pathlib
-	$(eval DFLAGS = $(DFLAGSCOMMON))
+	$(eval LIBMAGETESTS_DFLAGS = $(DFLAGS))
 
-	$(eval DFLAGS += -I$(PATHLIB_CODEDIR))
-	$(eval DFLAGS += -L$(OUTDIR)/pathlib.lib)
+	$(eval LIBMAGETESTS_DFLAGS += -I$(PATHLIB_CODEDIR))
+	$(eval LIBMAGETESTS_DFLAGS += -L$(OUTDIR)/pathlib.lib)
 
-	$(eval DFLAGS += -unittest)
-	$(eval DFLAGS += -main)
-	$(eval DFLAGS += -od$(OUTDIR))
-	dmd $(LIBMAGE_DFILES) $(DFLAGS) -of$(OUTDIR)/libmagetests.exe
+	$(eval LIBMAGETESTS_DFLAGS += -unittest)
+	$(eval LIBMAGETESTS_DFLAGS += -main)
+	$(eval LIBMAGETESTS_DFLAGS += -od$(OUTDIR))
+	dmd $(LIBMAGE_DFILES) $(LIBMAGETESTS_DFLAGS) -of$(OUTDIR)/libmagetests.exe
 
 app: $(OUTDIR)/mage.exe
 $(OUTDIR)/mage.exe: $(MAGEAPP_DFILES) | lib pathlib
-	$(eval DFLAGS = $(DFLAGSCOMMON))
+	$(eval MAGEAPP_DFLAGS = $(DFLAGS))
 
-	$(eval DFLAGS += -I$(PATHLIB_CODEDIR))
-	$(eval DFLAGS += -L$(OUTDIR)/pathlib.lib)
+	$(eval MAGEAPP_DFLAGS += -I$(PATHLIB_CODEDIR))
+	$(eval MAGEAPP_DFLAGS += -L$(OUTDIR)/pathlib.lib)
 
-	$(eval DFLAGS += -Icode/lib)
-	$(eval DFLAGS += -L$(OUTDIR)/libmage.lib)
+	$(eval MAGEAPP_DFLAGS += -Icode/lib)
+	$(eval MAGEAPP_DFLAGS += -L$(OUTDIR)/libmage.lib)
 
-	$(eval DFLAGS += -od$(OUTDIR))
-	dmd $(MAGEAPP_DFILES) $(DFLAGS) -of$(OUTDIR)/mage.exe
+	$(eval MAGEAPP_DFLAGS += -od$(OUTDIR))
+	dmd $(MAGEAPP_DFILES) $(MAGEAPP_DFLAGS) -of$(OUTDIR)/mage.exe
 
 apptests: $(OUTDIR)/magetests.exe
 $(OUTDIR)/magetests.exe: $(MAGEAPP_DFILES) | lib pathlib
