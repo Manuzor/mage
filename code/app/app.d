@@ -152,7 +152,7 @@ int main(string[] args)
   log.info("Manifest: %s", manifest);
 
   auto currentExeDir = currentExePath().parent;
-  auto libPath = currentExeDir ~ "lib";
+  auto libPath = currentExeDir;
   auto codePath = currentExeDir ~ "code";
 
   CompilationData data;

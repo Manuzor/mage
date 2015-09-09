@@ -58,7 +58,7 @@ int main(string[] args) {
   if(!destCode.exists) {
     destCode.mkdir(true);
   }
-  auto destLib = install ~ "lib";
+  auto destLib = install;
   if(!destLib.exists) {
     destLib.mkdir(true);
   }
@@ -67,7 +67,6 @@ int main(string[] args) {
   (srcCode ~ "lib").copyTo!progress(destImport);
   (srcCode ~ "app").copyTo!progress(destImport);
   (srcCode ~ "install" ~ "wand.d").copyTo!progress(destCode);
-  //(srcCode ~ "install" ~ "MageSource.d.template").copyTo!progress(destCode);
 
   // Binaries/Output
   (output ~ "libmage.lib").copyTo!progress(destLib);
