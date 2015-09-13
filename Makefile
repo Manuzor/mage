@@ -12,17 +12,18 @@ MAGEDIST_CODEDIR = code/install
 
 
 PATHLIB_DIR = thirdParty/pathlib
-PATHLIB_CODEDIR = $(PATHLIB_DIR)/code
+PATHLIB_DEP = $(PATHLIB_DIR)/
+PATHLIB_CODEDIR = $(PATHLIB_DEP)code
 PATHLIB_DFILES = $(shell find $(PATHLIB_CODEDIR) -name '*.d')
 PATHLIB_MAKE = +$(MAKE) -C $(PATHLIB_DIR) -e OUTDIR="../../$(OUTDIR)" -e DFLAGS="$(DFLAGS)"
+PATHLIB_URL = https://github.com/Manuzor/pathlib.git
+PATHLIB_CLONEARGS = -b make
 
 LIBMAGE_CODEDIR = code/lib
 LIBMAGE_DFILES = $(shell find $(LIBMAGE_CODEDIR) -name '*.d')
 
 MAGEAPP_CODEDIR = code/app
 MAGEAPP_DFILES = $(shell find $(MAGEAPP_CODEDIR) -name '*.d')
-
-SUBMODULE_DEP = thirdParty/
 
 
 default: all
@@ -37,23 +38,21 @@ init:
 clean:
 	rm -rf $(OUTDIR)
 	
-$(SUBMODULE_DEP):
-	git submodule update --init --recursive
+$(PATHLIB_DEP):
+	git clone $(PATHLIB_CLONEARGS) -- $(PATHLIB_URL) $(PATHLIB_DEP)
 
-pathlib: $(SUBMODULE_DEP)
+pathlib: $(PATHLIB_DEP)
 	@$(PATHLIB_MAKE) lib
 
-$(PATHLIB_DIR)/: thirdParty/
-
-pathlibtests: $(PATHLIB_DIR)
+pathlibtests: $(PATHLIB_DEP)
 	@$(PATHLIB_MAKE) tests
 
 tests: libtests apptests pathlibtests
 
 .PHONY: runtests
 runtests: tests
-	-$(OUTDIR)/pathlibtests.exe
-	-$(OUTDIR)/libmagetests.exe
+	$(OUTDIR)/pathlibtests.exe
+	$(OUTDIR)/libmagetests.exe
 
 dist: all
 	mkdir -p $(MAGEDIST_DESTDIR)

@@ -1,3 +1,0 @@
-[submodule "thirdParty/pathlib"]
-	path = thirdParty/pathlib
-	url = https://github.com/Manuzor/pathlib.git
