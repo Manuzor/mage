@@ -75,6 +75,9 @@ int main(string[] args)
   log.info("Running wand.");
   Target[] targets;
 
+  // Set global mage destination path.
+  G["mageDestPath"] = currentExePath().parent;
+
   auto order = targetOrder(wrappedTargets);
 
   auto context = new MagicContext();

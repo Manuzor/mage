@@ -1,5 +1,6 @@
 import mage;
 import std.range;
+import std.uni : toLower;
 
 
 class Init : Target
@@ -19,10 +20,10 @@ class Init : Target
     }
     G["configurations"] = G["configurations"].get!(Config[]) ~ configsx86_64;
 
-
     // Output dir pattern: `output<arch>/', e.g. outputx86, outputx86_64
     // Use the "context" from the super class Target.
-    G["outputDir"] = () @system => Variant(Path("output%s/".format(context["architecture"].get!string)));
+    G["outputDir"] = () @system => Variant(context["mageDestPath"].get!Path ~ "output%s/".format(context["architecture"].get!string));
+    G["outFileSuffix"] = () @system => Variant(context["name"].get!string.toLower() == "debug" ? "d" : "");
   }
 }
 
