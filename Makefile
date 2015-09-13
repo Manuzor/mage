@@ -1,8 +1,10 @@
 
 OUTDIR = output
 
+DFLAGS += -debug
 DFLAGS += -m64
 DFLAGS += -gc
+DFLAGS += -gs
 DFLAGS += -w
 
 MAGEDIST_DESTDIR = $(OUTDIR)/dist
