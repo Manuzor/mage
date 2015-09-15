@@ -16,8 +16,10 @@ PATHLIB_DEP = $(PATHLIB_DIR)/
 PATHLIB_CODEDIR = $(PATHLIB_DEP)code
 PATHLIB_DFILES = $(shell find $(PATHLIB_CODEDIR) -name '*.d')
 PATHLIB_MAKE = +$(MAKE) -C $(PATHLIB_DIR) -e OUTDIR="../../$(OUTDIR)" -e DFLAGS="$(DFLAGS)"
-PATHLIB_URL = https://github.com/Manuzor/pathlib.git
-PATHLIB_CLONEARGS = -b make
+PATHLIB_GIT_URL = https://github.com/Manuzor/pathlib.git
+PATHLIB_GIT_CLONEARGS =
+PATHLIB_GIT_CHECKOUTARGS = -q
+PATHLIB_GIT_BRANCH = v0.3.0
 
 LIBMAGE_CODEDIR = code/lib
 LIBMAGE_DFILES = $(shell find $(LIBMAGE_CODEDIR) -name '*.d')
@@ -29,17 +31,19 @@ MAGEAPP_DFILES = $(shell find $(MAGEAPP_CODEDIR) -name '*.d')
 default: all
 
 all: lib app tests
-
-init:
-	mkdir -p $(OUTDIR)
 	
 
 .PHONY: clean
 clean:
 	rm -rf $(OUTDIR)
-	
+
+.PHONY: clean-all
+clean-all: clean
+	rm -rf thirdParty/
+
 $(PATHLIB_DEP):
-	git clone $(PATHLIB_CLONEARGS) -- $(PATHLIB_URL) $(PATHLIB_DEP)
+	git clone $(PATHLIB_GIT_CLONEARGS) -- $(PATHLIB_GIT_URL) $(PATHLIB_DEP)
+	cd $(PATHLIB_DEP) && git checkout $(PATHLIB_GIT_CHECKOUTARGS) $(PATHLIB_GIT_BRANCH)
 
 pathlib: $(PATHLIB_DEP)
 	@$(PATHLIB_MAKE) lib
