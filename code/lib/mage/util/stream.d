@@ -46,7 +46,7 @@ mixin template StreamWrite()
 }
 
 unittest {
-  struct S { mixin StreamWrite; void writeImpl(...){} }
+  struct S { mixin StreamWrite; void writeImpl(A...)(A){} }
   S s;
   assert(s.indentLevel == 0);
   s.dedent();

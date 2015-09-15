@@ -30,7 +30,8 @@ struct CompilationData
   Path outFile;
 }
 
-string[] makeCommand(in CompilationData data) {
+string[] makeCommand(in CompilationData data)
+{
   return [data.compiler]
     ~ data.files.map!(a => a.normalizedData.to!string).array[]
     ~ data.libs.map!(a => a.normalizedData.to!string).array[]
@@ -39,7 +40,8 @@ string[] makeCommand(in CompilationData data) {
     ~ data.flags[];
 }
 
-int compile(in CompilationData data) {
+int compile(in CompilationData data)
+{
   import std.process : spawnProcess, wait;
 
   // Create a command from the compilation data
@@ -59,7 +61,8 @@ mixin M_MageFileMixin;
 
 // foo/MageFile => foo.d
 // foo/bar/MageFile => foo/bar.d
-auto transformMageFile(in Path srcRoot, in Path mageFile, in Path outDir) {
+auto transformMageFile(in Path srcRoot, in Path mageFile, in Path outDir)
+{
   auto base = mageFile.resolved().relativeTo(srcRoot.resolved().parent).parent;
   import std.stdio;
   log.info("srcRoot: %s | base: %s", srcRoot, base);
@@ -72,14 +75,16 @@ auto transformMageFile(in Path srcRoot, in Path mageFile, in Path outDir) {
   return dest;
 }
 
-void dumpManifest(in string[string] manifest, in Path outFile) {
+void dumpManifest(in string[string] manifest, in Path outFile)
+{
   import std.json;
 
   JSONValue j = manifest;
   outFile.writeFile(j.toPrettyString());
 }
 
-void dumpGeneratorConfig(in string[string] cfg, in Path outFile) {
+void dumpGeneratorConfig(in string[string] cfg, in Path outFile)
+{
   import std.json;
 
   JSONValue j = cfg;
@@ -139,11 +144,11 @@ int main(string[] args)
   log.info("MageFiles: %(\n  %s%)", mageFiles);
 
   string[string] manifest;
-  auto outDir = tempDir ~ "src";
+  auto transformedTargetDir = tempDir ~ "src";
   Path[] transformed;
   foreach(f; mageFiles)
   {
-    auto t = transformMageFile(sourceDir, f, outDir);
+    auto t = transformMageFile(sourceDir, f, transformedTargetDir);
     manifest[t.to!string] = f.to!string;
     transformed ~= t;
   }
@@ -151,8 +156,10 @@ int main(string[] args)
   dumpManifest(manifest, tempDir ~ "MageSourceManifest.json");
   log.info("Manifest: %s", manifest);
 
+  auto outDir = cwd();
+
   auto currentExeDir = currentExePath().parent;
-  auto libPath = currentExeDir ~ "lib";
+  auto libPath = currentExeDir;
   auto codePath = currentExeDir ~ "code";
 
   CompilationData data;
@@ -173,8 +180,9 @@ int main(string[] args)
   foreach(g; generators)
   {
     data.versions[$-1] = "MageGen_%s".format(g);
-    data.outFile = Path("wand-%s".format(g));
-    if(compile(data) == 0) {
+    data.outFile = outDir ~ "wand-%s".format(g);
+    if(compile(data) == 0)
+    {
       genPath.appendFile("%s\n".format(g));
     }
     else

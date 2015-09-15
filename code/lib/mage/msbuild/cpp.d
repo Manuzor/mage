@@ -93,8 +93,11 @@ MSBuildProject createProject(MagicContext context, ref in VSInfo info, Target ta
 
   auto _= log.Block(`Create Cpp MSBuildProject for "%s"`, name);
 
+  auto mageDestPath = context["mageDestPath"].get!Path;
+
   auto localDefaults = Properties("%s_defaults".format(name));
-  localDefaults["outputDir"] = Path("$(SolutionDir)$(Platform)$(Configuration)");
+  localDefaults["outputDir"] = mageDestPath ~ "$(Platform)$(Configuration)";
+  localDefaults["outFileSuffix"] = "";
   localDefaults["characterSet"] = "Unicode";
 
   target.properties.prettyPrint();
@@ -127,7 +130,7 @@ MSBuildProject createProject(MagicContext context, ref in VSInfo info, Target ta
     auto fallbackEnv = Environment(env.name ~ "_fallback", fallback);
     fallbackEnv["characterSet"] = "Unicode";
     fallbackEnv["wholeProgramOptimization"] = false;
-    fallbackEnv["intermediatesDir"] = Path("$(SolutionDir)temp/$(TargetName)_$(Platform)_$(Configuration)");
+    fallbackEnv["intermediatesDir"] = mageDestPath ~ Path("temp") ~ "$(TargetName)_$(Platform)_$(Configuration)";
     fallbackEnv["linkIncremental"] = false;
     env.internal = &fallbackEnv;
 
@@ -237,7 +240,9 @@ Path configOutputFile(ref Environment env, ref MSBuildProject proj, ref MSBuildC
     pVar = env.first("outputDir")
               .enforce("Neither `outputFile' not `outputDir' was found, "
                        "but need at least one of them.");
-    path = absolute(pVar.get!Path() ~ (proj.name ~ trType2FileExt(cfg.type)), env["mageFilePath"].get!Path.parent);
+    auto outDir = pVar.get!Path();
+    auto fileName = proj.name ~ env["outFileSuffix"].get!string ~ trType2FileExt(cfg.type);
+    path = absolute(outDir ~ fileName, env["mageFilePath"].get!Path.parent);
   }
 
   return path;
